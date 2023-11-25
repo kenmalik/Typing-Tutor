@@ -11,10 +11,12 @@ ExitProcess proto,dwExitCode:dword
 main proc
 
 .data
-	typingPrompt BYTE "This is a test typing prompt 123", 0
+	typingPrompt BYTE "This is a test typing prompt 123jjj", 0
 	endingMsg BYTE "Level complete", 0
 	
 	charIdx BYTE 0
+
+	characterCorrect BYTE LENGTHOF typingPrompt - 1 DUP(0)
 
 .code
 	; Write prompt
@@ -45,6 +47,8 @@ TypingLoop:
 	
 	mov eax, black + (white * 16)  ; Replace the previous char
 	call SetTextColor
+	movzx esi, charIdx
+	mov characterCorrect[esi], 0
 	dec charIdx
 
 	mov dl, charIdx                ; Move cursor to previous char
@@ -63,6 +67,7 @@ checkCharEqual:
 	jne    charNotEqual
 
 	; If character is equal
+	mov characterCorrect[esi], 1
 	mov eax, white + (green * 16)
 	call SetTextColor
 	movzx eax, typingPrompt[esi]
@@ -88,7 +93,14 @@ finishCheck:
 	call Crlf
 	mov edx, OFFSET endingMsg
 	call WriteString
+	
+	call Crlf
+	mov edx, OFFSET characterCorrect
+	call WriteString
 
+	mov ecx, LENGTHOF characterCorrect
+countCorrect:
+	cmp characterCorrect[ecx], 1
 
 	; Reset color
 	mov eax, white + (black * 16)
