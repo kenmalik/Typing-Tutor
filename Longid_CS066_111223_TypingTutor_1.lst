@@ -1,12 +1,4 @@
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-Microsoft (R) Macro Assembler Version 14.38.33130.0	    11/25/23 13:15:37
-=======
-Microsoft (R) Macro Assembler Version 14.38.33130.0	    11/23/23 21:44:57
->>>>>>> Stashed changes
-=======
-Microsoft (R) Macro Assembler Version 14.38.33130.0	    11/23/23 21:44:57
->>>>>>> Stashed changes
+Microsoft (R) Macro Assembler Version 14.38.33130.0	    11/25/23 13:34:15
 TypingTutor.asm						     Page 1 - 1
 
 
@@ -41,23 +33,18 @@ TypingTutor.asm(6) : warning A4011:multiple .MODEL directives found : .MODEL ign
  00000000			main proc
 
  00000000			.data
- 00000000 54 68 69 73 20		typingPrompt BYTE "This is a test typing prompt 123jjj", 0
+ 00000000 54 68 69 73 20		typingPrompt BYTE "This is a test typing prompt 123", 0
 	   69 73 20 61 20
 	   74 65 73 74 20
 	   74 79 70 69 6E
 	   67 20 70 72 6F
 	   6D 70 74 20 31
-	   32 33 6A 6A 6A
-	   00
- 00000024 4C 65 76 65 6C		endingMsg BYTE "Level complete", 0
+	   32 33 00
+ 00000021 4C 65 76 65 6C		endingMsg BYTE "Level complete", 0
 	   20 63 6F 6D 70
 	   6C 65 74 65 00
 					
- 00000033 00				charIdx BYTE 0
-
- 00000034  00000023 [			characterCorrect BYTE LENGTHOF typingPrompt - 1 DUP(0)
-	    00
-	   ]
+ 00000030 00				charIdx BYTE 0
 
  00000000			.code
 					; Write prompt
@@ -80,100 +67,77 @@ TypingTutor.asm(6) : warning A4011:multiple .MODEL directives found : .MODEL ign
 					
 					; Check if backspace pressed
  0000002E  66| 83 FA 08			cmp dx, VK_BACK
- 00000032  75 4C			jne checkCharEqual
+ 00000032  75 3E			jne checkCharEqual
 
 					; Backspace pressed
- 00000034  80 3D 00000033 R		cmp charIdx, 0                 ; If on char 0, don't do anything
+ 00000034  80 3D 00000030 R		cmp charIdx, 0                 ; If on char 0, don't do anything
 	   00
  0000003B  74 E0			je TypingLoop
 					
- 0000003D  B8 000000F0			mov eax, black + (white * 16)  ; Replace the previous char
- 00000042  E8 00000000 E		call SetTextColor
- 00000047  0F B6 35			movzx esi, charIdx
-	   00000033 R
- 0000004E  C6 86 00000034 R		mov characterCorrect[esi], 0
-	   00
- 00000055  FE 0D 00000033 R		dec charIdx
+					; Replacing the previous char
+ 0000003D  FE 0D 00000030 R		dec charIdx                    ; Move cursor to previous char
+ 00000043  8A 15 00000030 R		mov dl, charIdx
+ 00000049  E8 00000000 E		call Gotoxy
 
- 0000005B  8A 15 00000033 R		mov dl, charIdx                ; Move cursor to previous char
- 00000061  E8 00000000 E		call Gotoxy
-
- 00000066  0F B6 35			movzx esi, charIdx             ; Revert color of char (moves cursor forward)
-	   00000033 R
- 0000006D  0F B6 86			movzx eax, typingPrompt[esi]
+ 0000004E  B8 000000F0			mov eax, black + (white * 16)  ; Reverting color of char
+ 00000053  E8 00000000 E		call SetTextColor
+ 00000058  0F B6 35			movzx esi, charIdx             
+	   00000030 R
+ 0000005F  0F B6 86			movzx eax, typingPrompt[esi]   ; Write character in default color
 	   00000000 R
- 00000074  E8 00000000 E		call WriteChar
- 00000079  E8 00000000 E		call Gotoxy                    ; Move cursor back to previous char's space
- 0000007E  EB 9D			jmp TypingLoop                 ; Return to loop start
+ 00000066  E8 00000000 E		call WriteChar
+ 0000006B  E8 00000000 E		call Gotoxy                    ; Move cursor back to previous char's space
+ 00000070  EB AB			jmp TypingLoop                 ; Return to loop start
 
- 00000080			checkCharEqual:
- 00000080  0F B6 35			movzx esi, charIdx
-	   00000033 R
+ 00000072			checkCharEqual:
+ 00000072  0F B6 35			movzx esi, charIdx
+	   00000030 R
 					; Compare input with text
- 00000087  3A 86 00000000 R		cmp    al, typingPrompt[esi]
- 0000008D  75 1F			jne    charNotEqual
+ 00000079  3A 86 00000000 R		cmp    al, typingPrompt[esi]
+ 0000007F  75 18			jne    charNotEqual
 
 					; If character is equal
- 0000008F  C6 86 00000034 R		mov characterCorrect[esi], 1
-	   01
- 00000096  B8 0000002F			mov eax, white + (green * 16)
- 0000009B  E8 00000000 E		call SetTextColor
- 000000A0  0F B6 86			movzx eax, typingPrompt[esi]
+ 00000081  B8 0000002F			mov eax, white + (green * 16)
+ 00000086  E8 00000000 E		call SetTextColor
+ 0000008B  0F B6 86			movzx eax, typingPrompt[esi]
 	   00000000 R
- 000000A7  E8 00000000 E		call WriteChar
- 000000AC  EB 16			jmp finishCheck
+ 00000092  E8 00000000 E		call WriteChar
+ 00000097  EB 16			jmp finishCheck
 
- 000000AE			charNotEqual:
- 000000AE  B8 0000004F			mov eax, white + (red * 16)
- 000000B3  E8 00000000 E		call SetTextColor
- 000000B8  0F B6 86			movzx eax, typingPrompt[esi]
+ 00000099			charNotEqual:
+ 00000099  B8 0000004F			mov eax, white + (red * 16)
+ 0000009E  E8 00000000 E		call SetTextColor
+ 000000A3  0F B6 86			movzx eax, typingPrompt[esi]
 	   00000000 R
- 000000BF  E8 00000000 E		call WriteChar
+ 000000AA  E8 00000000 E		call WriteChar
 
- 000000C4			finishCheck:
- 000000C4  FE 05 00000033 R		inc    charIdx
+ 000000AF			finishCheck:
+ 000000AF  FE 05 00000030 R		inc    charIdx
 					; If not finished yet
- 000000CA  80 BE 00000001 R		cmp    typingPrompt[esi + 1], 0
+ 000000B5  80 BE 00000001 R		cmp    typingPrompt[esi + 1], 0
 	   00
- 000000D1  0F 85 FFFFFF46		jne    TypingLoop
+ 000000BC  0F 85 FFFFFF5B		jne    TypingLoop
 
-					; When complete
- 000000D7  E8 00000000 E		call Crlf
- 000000DC  B8 0000002F			mov eax, white + (green * 16)
- 000000E1  E8 00000000 E		call SetTextColor
- 000000E6  E8 00000000 E		call Crlf
- 000000EB  BA 00000024 R		mov edx, OFFSET endingMsg
- 000000F0  E8 00000000 E		call WriteString
-					
- 000000F5  E8 00000000 E		call Crlf
- 000000FA  BA 00000034 R		mov edx, OFFSET characterCorrect
- 000000FF  E8 00000000 E		call WriteString
-
- 00000104  B9 00000023			mov ecx, LENGTHOF characterCorrect
- 00000109			countCorrect:
- 00000109  80 B9 00000034 R		cmp characterCorrect[ecx], 1
-	   01
+					; Level complete message
+ 000000C2  E8 00000000 E		call Crlf
+ 000000C7  B8 0000002F			mov eax, white + (green * 16)
+ 000000CC  E8 00000000 E		call SetTextColor
+ 000000D1  E8 00000000 E		call Crlf
+ 000000D6  BA 00000021 R		mov edx, OFFSET endingMsg
+ 000000DB  E8 00000000 E		call WriteString
 					
 
 					; Reset color
- 00000110  B8 0000000F			mov eax, white + (black * 16)
- 00000115  E8 00000000 E		call SetTextColor
+ 000000E0  B8 0000000F			mov eax, white + (black * 16)
+ 000000E5  E8 00000000 E		call SetTextColor
 						
 
 					invoke ExitProcess,0
- 0000011A  6A 00	   *	    push   +000000000h
- 0000011C  E8 00000000 E   *	    call   ExitProcess
- 00000121			main endp
+ 000000EA  6A 00	   *	    push   +000000000h
+ 000000EC  E8 00000000 E   *	    call   ExitProcess
+ 000000F1			main endp
 				end main
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-Microsoft (R) Macro Assembler Version 14.38.33130.0	    11/25/23 13:15:37
-=======
-Microsoft (R) Macro Assembler Version 14.38.33130.0	    11/23/23 21:44:57
->>>>>>> Stashed changes
-=======
-Microsoft (R) Macro Assembler Version 14.38.33130.0	    11/23/23 21:44:57
->>>>>>> Stashed changes
+Microsoft (R) Macro Assembler Version 14.38.33130.0	    11/25/23 13:34:15
 TypingTutor.asm						     Symbols 2 - 1
 
 
@@ -267,8 +231,8 @@ Segments and Groups:
 
 FLAT . . . . . . . . . . . . . .	GROUP
 STACK  . . . . . . . . . . . . .	32 Bit	 00001000 Para	  Stack	  'STACK'	 
-_DATA  . . . . . . . . . . . . .	32 Bit	 00000057 Para	  Public  'DATA'	
-_TEXT  . . . . . . . . . . . . .	32 Bit	 00000121 Para	  Public  'CODE'	
+_DATA  . . . . . . . . . . . . .	32 Bit	 00000031 Para	  Public  'DATA'	
+_TEXT  . . . . . . . . . . . . .	32 Bit	 000000F1 Para	  Public  'CODE'	
 
 
 Procedures, parameters, and locals:
@@ -375,12 +339,11 @@ WriteStackFrame  . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 WriteString  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteToFile  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteWindowsMsg  . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-main . . . . . . . . . . . . . .	P Near	 00000000 _TEXT	Length= 00000121 Public STDCALL
+main . . . . . . . . . . . . . .	P Near	 00000000 _TEXT	Length= 000000F1 Public STDCALL
   TypingLoop . . . . . . . . . .	L Near	 0000001D _TEXT	
-  checkCharEqual . . . . . . . .	L Near	 00000080 _TEXT	
-  charNotEqual . . . . . . . . .	L Near	 000000AE _TEXT	
-  finishCheck  . . . . . . . . .	L Near	 000000C4 _TEXT	
-  countCorrect . . . . . . . . .	L Near	 00000109 _TEXT	
+  checkCharEqual . . . . . . . .	L Near	 00000072 _TEXT	
+  charNotEqual . . . . . . . . .	L Near	 00000099 _TEXT	
+  finishCheck  . . . . . . . . .	L Near	 000000AF _TEXT	
 printf . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External C
 scanf  . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External C
 wsprintfA  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External C
@@ -602,10 +565,9 @@ WriteConsole . . . . . . . . . .	Text   	 WriteConsoleA
 black  . . . . . . . . . . . . .	Number	 00000000h   
 blue . . . . . . . . . . . . . .	Number	 00000001h   
 brown  . . . . . . . . . . . . .	Number	 00000006h   
-charIdx  . . . . . . . . . . . .	Byte	 00000033 _DATA	
-characterCorrect . . . . . . . .	Byte	 00000034 _DATA	
+charIdx  . . . . . . . . . . . .	Byte	 00000030 _DATA	
 cyan . . . . . . . . . . . . . .	Number	 00000003h   
-endingMsg  . . . . . . . . . . .	Byte	 00000024 _DATA	
+endingMsg  . . . . . . . . . . .	Byte	 00000021 _DATA	
 exit . . . . . . . . . . . . . .	Text   	 INVOKE ExitProcess,0
 gray . . . . . . . . . . . . . .	Number	 00000008h   
 green  . . . . . . . . . . . . .	Number	 00000002h   

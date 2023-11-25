@@ -11,12 +11,10 @@ ExitProcess proto,dwExitCode:dword
 main proc
 
 .data
-	typingPrompt BYTE "This is a test typing prompt 123jjj", 0
+	typingPrompt BYTE "This is a test typing prompt 123", 0
 	endingMsg BYTE "Level complete", 0
 	
 	charIdx BYTE 0
-
-	characterCorrect BYTE LENGTHOF typingPrompt - 1 DUP(0)
 
 .code
 	; Write prompt
@@ -45,17 +43,15 @@ TypingLoop:
 	cmp charIdx, 0                 ; If on char 0, don't do anything
 	je TypingLoop
 	
-	mov eax, black + (white * 16)  ; Replace the previous char
-	call SetTextColor
-	movzx esi, charIdx
-	mov characterCorrect[esi], 0
-	dec charIdx
-
-	mov dl, charIdx                ; Move cursor to previous char
+	; Replacing the previous char
+	dec charIdx                    ; Move cursor to previous char
+	mov dl, charIdx
 	call Gotoxy
 
-	movzx esi, charIdx             ; Revert color of char (moves cursor forward)
-	movzx eax, typingPrompt[esi]
+	mov eax, black + (white * 16)  ; Reverting color of char
+	call SetTextColor
+	movzx esi, charIdx             
+	movzx eax, typingPrompt[esi]   ; Write character in default color
 	call WriteChar
 	call Gotoxy                    ; Move cursor back to previous char's space
 	jmp TypingLoop                 ; Return to loop start
@@ -67,7 +63,6 @@ checkCharEqual:
 	jne    charNotEqual
 
 	; If character is equal
-	mov characterCorrect[esi], 1
 	mov eax, white + (green * 16)
 	call SetTextColor
 	movzx eax, typingPrompt[esi]
@@ -86,7 +81,7 @@ finishCheck:
 	cmp    typingPrompt[esi + 1], 0
 	jne    TypingLoop
 
-	; When complete
+	; Level complete message
 	call Crlf
 	mov eax, white + (green * 16)
 	call SetTextColor
@@ -94,13 +89,6 @@ finishCheck:
 	mov edx, OFFSET endingMsg
 	call WriteString
 	
-	call Crlf
-	mov edx, OFFSET characterCorrect
-	call WriteString
-
-	mov ecx, LENGTHOF characterCorrect
-countCorrect:
-	cmp characterCorrect[ecx], 1
 
 	; Reset color
 	mov eax, white + (black * 16)
