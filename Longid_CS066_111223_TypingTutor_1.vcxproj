@@ -15,6 +15,9 @@
       <IncludePaths Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">C:\PATH_Programs\Irvine;%(IncludePaths)</IncludePaths>
     </MASM>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="Text.txt" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{71B32514-4999-4FFF-993B-9031E8E0F5F8}</ProjectGuid>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
