@@ -9,13 +9,14 @@ INCLUDE Macros.inc
 ExitProcess proto,dwExitCode:dword
 
 BUFFER_SIZE = 5000
-FILE_UNREAD = 0AAAAAh
+FILE_UNREAD = -1
 
 .code
 main proc
 
 .data
 	typingPrompt BYTE BUFFER_SIZE DUP(?)
+	typingPromptSize DWORD 0
 	filename BYTE "Text.txt", 0
 	fileHandle HANDLE ?
 
@@ -35,6 +36,13 @@ main proc
 	mov edx, OFFSET typingPrompt
 	call WriteString
 	call closeInputFile
+	call Crlf
+
+	; DEBUG: typing prompt size output
+	mov eax, typingPromptSize
+	call WriteInt
+
+	
 	
 	mov dh, 0
 	mov dl, 0
@@ -118,7 +126,7 @@ main endp
 ; Opens the file whose name is stored in filename. Verifies file is opened and
 ; that contents are within designated buffer size.
 ; Receives: EDX = Offset of the filename to be opened.
-; Returns:  EAX = set to FILE_UNREAD if error occurs.
+; Returns:  EAX = Bytes read (set to FILE_UNREAD if error occurs).
 ;-------------------------------------------------------------------------------
 openFile proc
 	call OpenInputFile
@@ -134,6 +142,7 @@ file_ok:
 	mov edx, OFFSET typingPrompt
 	mov ecx, BUFFER_SIZE
 	call ReadFromFile
+	mov typingPromptSize, eax
 	jnc check_buffer_size
 	mWrite "Error reading file. "
 	call WriteWindowsMsg
