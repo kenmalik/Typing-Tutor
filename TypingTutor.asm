@@ -1,27 +1,40 @@
 ; TypingTutor.asm
 
 INCLUDE Irvine32.inc
+INCLUDE Macros.inc
 
 .386
 .model flat,stdcall
 .stack 4096
 ExitProcess proto,dwExitCode:dword
 
+BUFFER_SIZE = 5000
+FILE_UNREAD = 0AAAAAh
+
 .code
 main proc
 
 .data
-	typingPrompt BYTE "This is a test typing prompt 123", 0
+	typingPrompt BYTE BUFFER_SIZE DUP(?)
+	filename BYTE "Text.txt", 0
+	fileHandle HANDLE ?
+
 	endingMsg BYTE "Level complete", 0
 	
 	charIdx BYTE 0
 
 .code
-	; Write prompt
+	; Write prompt from file
 	mov eax, black + (white * 16)
 	call SetTextColor
+
+	mov edx, OFFSET filename
+	call openFile
+	cmp eax, FILE_UNREAD
+	je quit
 	mov edx, OFFSET typingPrompt
 	call WriteString
+	call closeInputFile
 	
 	mov dh, 0
 	mov dl, 0
@@ -92,9 +105,55 @@ finishCheck:
 
 	; Reset color
 	mov eax, white + (black * 16)
-	call SetTextColor
-		
+	call SetTextColor	
 
+quit:
 	invoke ExitProcess,0
 main endp
+
+
+;-------------------------------------------------------------------------------
+; openFile
+;
+; Opens the file whose name is stored in filename. Verifies file is opened and
+; that contents are within designated buffer size.
+; Receives: EDX = Offset of the filename to be opened.
+; Returns:  EAX = set to FILE_UNREAD if error occurs.
+;-------------------------------------------------------------------------------
+openFile proc
+	call OpenInputFile
+	mov fileHandle, eax
+
+	cmp eax, INVALID_HANDLE_VALUE
+	jne file_ok
+	mWrite <"Cannot open file", 0dh, 0ah>
+	mov eax, FILE_UNREAD
+	jmp quit
+
+file_ok:
+	mov edx, OFFSET typingPrompt
+	mov ecx, BUFFER_SIZE
+	call ReadFromFile
+	jnc check_buffer_size
+	mWrite "Error reading file. "
+	call WriteWindowsMsg
+	mov eax, FILE_UNREAD
+	jmp quit
+	
+check_buffer_size:
+	cmp eax, BUFFER_SIZE
+	jb quit
+	mWrite <"Error: Buffer too small for the file", 0dh, 0ah>
+	mov eax, FILE_UNREAD
+
+quit:
+	ret
+openFile endp
+
+closeInputFile proc
+	mov eax, fileHandle
+	call CloseFile
+	ret
+closeInputFile endp
+
 end main
