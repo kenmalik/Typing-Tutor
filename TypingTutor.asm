@@ -8,6 +8,8 @@ INCLUDE Macros.inc
 .stack 4096
 ExitProcess proto,dwExitCode:dword
 
+HORIZONTAL_OFFSET = 15
+LINE_LENGTH = 50
 BUFFER_SIZE = 5000
 FILE_UNREAD = -1
 
@@ -22,6 +24,9 @@ main proc
 
 	endingMsg BYTE "Level complete", 0
 	
+	rowNum BYTE 0
+	colNum BYTE 0
+
 	charIdx BYTE 0
 
 .code
@@ -33,19 +38,21 @@ main proc
 	call openFile
 	cmp eax, FILE_UNREAD
 	je quit
+
 	mov edx, OFFSET typingPrompt
-	call WriteString
+	call WritePrompt
+
 	call closeInputFile
 	call Crlf
 
 	; DEBUG: typing prompt size output
-	mov eax, typingPromptSize
-	call WriteInt
+	; mov eax, typingPromptSize
+	; call WriteInt
 
 	
 	
 	mov dh, 0
-	mov dl, 0
+	mov dl, HORIZONTAL_OFFSET
 	call Gotoxy
 
 
@@ -65,8 +72,11 @@ TypingLoop:
 	je TypingLoop
 	
 	; Replacing the previous char
+	dec colNum
 	dec charIdx                    ; Move cursor to previous char
-	mov dl, charIdx
+	mov dh, rowNum
+	mov dl, colNum
+	add dl, HORIZONTAL_OFFSET
 	call Gotoxy
 
 	mov eax, black + (white * 16)  ; Reverting color of char
@@ -88,13 +98,25 @@ checkCharEqual:
 	call SetTextColor
 	movzx eax, typingPrompt[esi]
 	call WriteChar
-	jmp finishCheck
+	jmp lineEndCheck
 
 charNotEqual:
 	mov eax, white + (red * 16)
 	call SetTextColor
 	movzx eax, typingPrompt[esi]
 	call WriteChar
+
+lineEndCheck:
+	inc colNum
+	cmp colNum, LINE_LENGTH
+	jne finishCheck
+
+	inc rowNum
+	mov colNum, 0
+	mov dh, rowNum
+	mov dl, colNum
+	add dl, HORIZONTAL_OFFSET
+	call Gotoxy
 
 finishCheck:
 	inc    charIdx
@@ -159,10 +181,62 @@ quit:
 	ret
 openFile endp
 
+
 closeInputFile proc
 	mov eax, fileHandle
 	call CloseFile
 	ret
 closeInputFile endp
+
+
+;-------------------------------------------------------------------------------
+; WriteLine
+;
+; Writes a line of LINE_LENGTH length.
+; Receives: EBX = Starting index of text to be outputted
+;           EDI = Offset of the filename to be opened.
+; Returns:  EBX = Index of text ended at
+;-------------------------------------------------------------------------------
+WriteLine proc
+	mov ecx, LINE_LENGTH
+lineWriter:
+	mov al, [edi + ebx]
+	cmp al, 0
+	je quit
+	call WriteChar
+	inc ebx
+	loop lineWriter
+
+quit:
+	ret
+WriteLine endp
+
+
+
+WritePrompt proc
+.data
+	lineCharIdx DWORD 0
+	lineNumber BYTE 0
+
+.code
+	mov ebx, 0
+	mov edi, OFFSET typingPrompt
+
+promptWriteLoop:
+	mov lineCharIdx, ebx
+
+	mov dh, lineNumber
+	mov dl, HORIZONTAL_OFFSET
+	call Gotoxy
+
+	call WriteLine
+	call Crlf
+	inc lineNumber
+
+	cmp ebx, lineCharIdx
+	jne promptWriteLoop
+
+	ret
+WritePrompt endp
 
 end main
