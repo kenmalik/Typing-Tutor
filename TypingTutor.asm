@@ -8,10 +8,10 @@ INCLUDE Macros.inc
 .stack 4096
 ExitProcess proto,dwExitCode:dword
 
-VERTICAL_OFFSET = 5
+VERTICAL_OFFSET = 2
 HORIZONTAL_OFFSET = 20
 LINE_LENGTH = 64
-MAX_LINES = 5
+STARTING_DISTANCE = 24
 BUFFER_SIZE = 5000
 FILE_UNREAD = -1
 TICK = 50 ; in milliseconds
@@ -21,10 +21,14 @@ SECOND_IN_TICKS = 20
 main proc
 
 .data
+	divider BYTE LINE_LENGTH DUP("-"), 0
+
 	typingPrompt BYTE BUFFER_SIZE DUP(?)
 	typingPromptSize DWORD 0
 	filename BYTE "Text.txt", 0
 	fileHandle HANDLE ?
+
+	typingPromptLeftBound DWORD 0
 
 	colors WORD LENGTHOF typingPrompt - 1 DUP(black+(white*16)), 0
 
@@ -33,24 +37,17 @@ main proc
 	; Cursor position
 	cursorX BYTE 0
 	cursorY BYTE 0
+	distanceFromTop BYTE STARTING_DISTANCE
 
-	charIdx BYTE 0
+	charIdx DWORD 0
 
 	linePrintTicksElapsed BYTE 0
-	lineToPrint BYTE LINE_LENGTH DUP("a"), 0
 	linePrintCharIdx DWORD 0
-	linePrintLineNum BYTE 0
-	distanceFromTop BYTE 15
+	lineProgressSpeed BYTE SECOND_IN_TICKS * 2
+	
 
 .code
-	; Set to standard color
-	mov eax, black + (white * 16)
-	call SetTextColor
-
-	; Write prompt from file
-	mov eax, black + (white * 16)
-	call SetTextColor
-
+	; Read file to memory
 	mov edx, OFFSET filename
 	call openFile
 	cmp eax, FILE_UNREAD
@@ -59,6 +56,20 @@ main proc
 	call closeInputFile
 	call Crlf
 	
+	; Add top divider
+	mov eax, yellow + (black * 16)
+	call SetTextColor
+	mGotoxy HORIZONTAL_OFFSET, VERTICAL_OFFSET - 1
+	mWriteString OFFSET divider
+
+	; Add bottom divider
+	mGotoxy HORIZONTAL_OFFSET, VERTICAL_OFFSET + STARTING_DISTANCE + 1
+	mWriteString OFFSET divider
+
+	; Set to standard color
+	mov eax, black + (white * 16)
+	call SetTextColor
+
 	; Initial cursor positioning
 	mov dh, VERTICAL_OFFSET
 	add dh, distanceFromTop
@@ -72,42 +83,50 @@ MainGameLoop:
 
 	; --- WORK IN PROGRESS ---
 
+	; If 2 seconds has passed, move text up one line
 	inc linePrintTicksElapsed
-	cmp linePrintTicksElapsed, SECOND_IN_TICKS * 2
+	mov al, lineProgressSpeed
+	cmp linePrintTicksElapsed, al
 	jne KeyRead
 
+	sub lineProgressSpeed, 1		; Increase the speed of progression
 	dec distanceFromTop
+	cmp distanceFromTop, -1			; Game over condition
+	je quit
 	mov linePrintTicksElapsed, 0
+
+	; Push cursor position to stack
 	movzx ax, cursorX
 	push ax
 	movzx ax, cursorY
 	push ax
 
-	; Set cursor position
+	; Set cursor position to rewrite block of text
 	mov dh, distanceFromTop
 	add dh, VERTICAL_OFFSET
 	mov dl, HORIZONTAL_OFFSET
-	call updateCursorPos
+	call UpdateCursorPos
 
 	; Write string
 	add linePrintCharIdx, LINE_LENGTH
 	mov edx, OFFSET typingPrompt
 	mov ecx, linePrintCharIdx
+	mov ebx, typingPromptLeftBound
 	call PrintWithLineBreaks
 
 	; Move cursor to line below
 	call NewLine
 
 	; Write blank lines to clear old text
-	call ClearLine
+	call ClearDisplayLine
 
-	; Reset cursor position
+	; Pop original cursor position to return to former position
 	pop ax
 	dec al
 	mov dh, al
 	pop ax
 	mov dl, al
-	call updateCursorPos
+	call UpdateCursorPos
 
 	; ------------------------
 
@@ -127,7 +146,7 @@ KeyRead:
 	; Replacing the previous char
 	dec cursorX
 	dec charIdx                    ; Move cursor to previous char
-	movzx esi, charIdx
+	mov esi, charIdx
 	mov dh, cursorY
 	mov dl, cursorX
 	call UpdateCursorPos
@@ -140,7 +159,7 @@ KeyRead:
 checkCharEqual:
 	inc cursorX
 
-	movzx esi, charIdx
+	mov esi, charIdx
 	; Compare input with text
 	cmp    al, typingPrompt[esi]
 	jne    charNotEqual
@@ -157,7 +176,15 @@ charNotEqual:
 lineEndCheck:
 	cmp cursorX, LINE_LENGTH + HORIZONTAL_OFFSET
 	jne finishCheck
+
+	; Clear completed lines
+	mov dh, cursorY
+	mov dl, HORIZONTAL_OFFSET
+	call UpdateCursorPos					; Move cursor position for display clearing
+	call ClearDisplayLine
 	call NewLine
+	add typingPromptLeftBound, LINE_LENGTH	; Move left bound for typing prompt forward
+	inc distanceFromTop						; Inc distance from top to account for cleared line
 
 finishCheck:
 	inc    charIdx
@@ -172,13 +199,11 @@ finishCheck:
 	call Crlf
 	mov edx, OFFSET endingMsg
 	call WriteString
-	
-
-	; Reset color
-	mov eax, white + (black * 16)
-	call SetTextColor	
 
 quit:
+	mov eax, white + (black * 16)
+	call SetTextColor
+	mGotoxy 0, VERTICAL_OFFSET + STARTING_DISTANCE + 4
 	invoke ExitProcess,0
 main endp
 
@@ -270,9 +295,9 @@ WriteColorChar endp
 
 ; EDX = Offset of string
 ; ECX = Amount of characters to print
+; EBX = The index to start from
 PrintWithLineBreaks proc
-	mov ebx, 0
-	mov edi, 0				; Counter to if line length was reached
+ 	mov edi, 0				; Counter for if line length was reached
 	mov al, [edx + ebx]
 
 printLoop:
@@ -292,40 +317,61 @@ writeChars:
 	cmp al, 0
 	jne continuePrintLoop
 
-	call ClearLine
+	call ClearDisplayLine
 	jmp quit
 
 continuePrintLoop:
-	loop PrintLoop
+	cmp ebx, ecx
+	jne printLoop
 	
 quit:
 	ret
 PrintWithLineBreaks endp
 
 
-updateCursorPos proc
+UpdateCursorPos proc
 	mov cursorX, dl
 	mov cursorY, dh
 	mGotoxy cursorX, cursorY
 	ret
-updateCursorPos endp
+UpdateCursorPos endp
 
 
 NewLine proc uses edx
 	inc cursorY
 	mov dh, cursorY
 	mov dl, HORIZONTAL_OFFSET
-	call updateCursorPos
+	call UpdateCursorPos
 	ret
 NewLine endp
 
 
-clearLine proc uses eax
+ClearDisplayLine proc uses eax
 	mov eax, white+(black*16)
 	call SetTextColor
-	mWriteSpace LINE_LENGTH
+
+spaceWrite:
+	mWriteSpace
+	inc cursorX
+	cmp cursorX, HORIZONTAL_OFFSET + LINE_LENGTH
+	jne spaceWrite
+	
 	ret
-clearLine endp
+ClearDisplayLine endp
+
+; EAX = the color to save to colors array
+; EBX = the index in the colors array to start from
+SetColorArrayLine proc uses ecx
+	call SetTextColor
+	mov ecx, LINE_LENGTH
+
+colorSetter:
+	mov colors[ebx * TYPE colors], ax
+	inc ebx
+	loop colorSetter
+	
+	ret
+SetColorArrayLine endp
 
 ; EAX = the color to write in and save to colors array
 UpdateChar proc
