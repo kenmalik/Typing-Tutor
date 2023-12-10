@@ -101,8 +101,6 @@ MainGameLoop:
 	; Write blank lines to clear old text
 	call ClearLine
 
-	call DebugCursorPos
-
 	; Reset cursor position
 	pop ax
 	dec al
@@ -123,21 +121,19 @@ KeyRead:
 	jne checkCharEqual
 
 	; Backspace pressed
-	cmp charIdx, 0                 ; If on char 0, don't do anything
+	cmp cursorX, HORIZONTAL_OFFSET                 ; If on char 0, don't do anything
 	je MainGameLoop
 	
 	; Replacing the previous char
 	dec cursorX
 	dec charIdx                    ; Move cursor to previous char
-	mov dh, cursorX
-	mov dl, cursorY
+	movzx esi, charIdx
+	mov dh, cursorY
+	mov dl, cursorX
 	call UpdateCursorPos
 
 	mov eax, black + (white * 16)  ; Reverting color of char
-	call SetTextColor
-	movzx esi, charIdx             
-	movzx eax, typingPrompt[esi]   ; Write character in default color
-	call WriteChar
+	call UpdateChar
 	call Gotoxy                    ; Move cursor back to previous char's space
 	jmp MainGameLoop                 ; Return to loop start
 
@@ -339,23 +335,5 @@ UpdateChar proc
 	call WriteChar
 	ret
 UpdateChar endp
-
-DebugCursorPos proc uses eax
-	mGotoxy 0, 0
-	mWrite "X: "
-	mWriteSpace 2
-	mGotoxy 3, 0
-	movzx eax, cursorX
-	call WriteDec
-	call Crlf
-	mWrite "Y: "
-	mWriteSpace 2
-	mGotoxy 3, 1
-	movzx eax, cursorY
-	call WriteDec
-	
-	mGotoxy cursorX, cursorY
-	ret
-DebugCursorPos endp
 
 end main
