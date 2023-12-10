@@ -47,6 +47,10 @@ main proc
 	
 
 .code
+	mov eax, white+(black*16)
+	call SetTextColor
+	call Clrscr
+
 	; Read file to memory
 	mov edx, OFFSET filename
 	call openFile
@@ -63,7 +67,7 @@ main proc
 	mWriteString OFFSET divider
 
 	; Add bottom divider
-	mGotoxy HORIZONTAL_OFFSET, VERTICAL_OFFSET + STARTING_DISTANCE + 1
+	mGotoxy HORIZONTAL_OFFSET, VERTICAL_OFFSET + STARTING_DISTANCE
 	mWriteString OFFSET divider
 
 	; Set to standard color
@@ -81,8 +85,6 @@ MainGameLoop:
     mov  eax, TICK    
     call Delay           ; Delay to ensure proper key read
 
-	; --- WORK IN PROGRESS ---
-
 	; If 2 seconds has passed, move text up one line
 	inc linePrintTicksElapsed
 	mov al, lineProgressSpeed
@@ -91,7 +93,7 @@ MainGameLoop:
 
 	sub lineProgressSpeed, 1		; Increase the speed of progression
 	dec distanceFromTop
-	cmp distanceFromTop, -1			; Game over condition
+	cmp distanceFromTop, -1			; Game over if reached top of play area
 	je quit
 	mov linePrintTicksElapsed, 0
 
@@ -107,7 +109,7 @@ MainGameLoop:
 	mov dl, HORIZONTAL_OFFSET
 	call UpdateCursorPos
 
-	; Write string
+	; Write text block
 	add linePrintCharIdx, LINE_LENGTH
 	mov edx, OFFSET typingPrompt
 	mov ecx, linePrintCharIdx
@@ -116,10 +118,13 @@ MainGameLoop:
 
 	; Move cursor to line below
 	call NewLine
-
+	cmp cursorY, VERTICAL_OFFSET + STARTING_DISTANCE
+	je ReturnToOriginalPos
+	
 	; Write blank lines to clear old text
 	call ClearDisplayLine
-
+	
+ReturnToOriginalPos:
 	; Pop original cursor position to return to former position
 	pop ax
 	dec al
@@ -127,8 +132,6 @@ MainGameLoop:
 	pop ax
 	mov dl, al
 	call UpdateCursorPos
-
-	; ------------------------
 
 KeyRead:
 
@@ -255,32 +258,9 @@ closeInputFile proc
 closeInputFile endp
 
 
-;-------------------------------------------------------------------------------
-; WriteLine
-;
-; Writes a line of LINE_LENGTH length.
-; Receives: EBX = Starting index of text to be outputted
-;           EDX = Offset of the string to write.
-; Returns:  EBX = Index of text ended at
-;-------------------------------------------------------------------------------
-WriteLine proc uses ecx
-	mov ecx, LINE_LENGTH
-lineWriter:
-	mov al, [edx + ebx]
-	cmp al, 0
-	je quit
-	call WriteChar
-	inc ebx
-	loop lineWriter
-
-quit:
-	ret
-WriteLine endp
-
-
-
 ; EBX = Index of character in array to write
 WriteColorChar proc uses ecx
+	inc cursorX
 	mov ecx, OFFSET colors
 
 	mov eax, [ecx + (ebx * TYPE colors)]
@@ -294,7 +274,7 @@ WriteColorChar endp
 
 
 ; EDX = Offset of string
-; ECX = Amount of characters to print
+; ECX = The index to stop at
 ; EBX = The index to start from
 PrintWithLineBreaks proc
  	mov edi, 0				; Counter for if line length was reached
@@ -317,7 +297,7 @@ writeChars:
 	cmp al, 0
 	jne continuePrintLoop
 
-	call ClearDisplayLine
+	call ClearDisplayLine	; Clear the rest of the display line
 	jmp quit
 
 continuePrintLoop:
@@ -359,19 +339,6 @@ spaceWrite:
 	ret
 ClearDisplayLine endp
 
-; EAX = the color to save to colors array
-; EBX = the index in the colors array to start from
-SetColorArrayLine proc uses ecx
-	call SetTextColor
-	mov ecx, LINE_LENGTH
-
-colorSetter:
-	mov colors[ebx * TYPE colors], ax
-	inc ebx
-	loop colorSetter
-	
-	ret
-SetColorArrayLine endp
 
 ; EAX = the color to write in and save to colors array
 UpdateChar proc
