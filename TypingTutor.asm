@@ -8,45 +8,53 @@ INCLUDE Macros.inc
 .stack 4096
 ExitProcess proto,dwExitCode:dword
 
+; Play area bounds
 VERTICAL_OFFSET = 2
-HORIZONTAL_OFFSET = 20
+HORIZONTAL_OFFSET = 10
 LINE_LENGTH = 64
 STARTING_DISTANCE = 24
+
+; File reading utilities
 BUFFER_SIZE = 5000
 FILE_UNREAD = -1
+
+; Game logic timing
 TICK = 50 ; in milliseconds
 SECOND_IN_TICKS = 20
+STARTING_PROGRESSION_SPEED = SECOND_IN_TICKS * 2
 
 .code
 main proc
 
 .data
+	; Graphics elements
 	divider BYTE LINE_LENGTH DUP("-"), 0
+	endingMsg BYTE "--- Level Complete ---", 0
 
+	; For file handling
 	typingPrompt BYTE BUFFER_SIZE DUP(?)
 	typingPromptSize DWORD 0
 	filename BYTE "Text.txt", 0
 	fileHandle HANDLE ?
 
+	; Typing prompt data
 	typingPromptLeftBound DWORD 0
+	charIdx DWORD 0
+	textColors WORD LENGTHOF typingPrompt - 1 DUP(black+(white*16)), 0
 
-	colors WORD LENGTHOF typingPrompt - 1 DUP(black+(white*16)), 0
-
-	endingMsg BYTE "Level complete", 0
-	
-	; Cursor position
+	; Cursor position data
 	cursorX BYTE 0
 	cursorY BYTE 0
 	distanceFromTop BYTE STARTING_DISTANCE
 
-	charIdx DWORD 0
-
+	; Typing prompt display timing
 	linePrintTicksElapsed BYTE 0
 	linePrintCharIdx DWORD 0
-	lineProgressSpeed BYTE SECOND_IN_TICKS * 2
+	lineProgressSpeed BYTE STARTING_PROGRESSION_SPEED
 	
 
 .code
+	; Clear screen to prevent weird screen color
 	mov eax, white+(black*16)
 	call SetTextColor
 	call Clrscr
@@ -56,9 +64,7 @@ main proc
 	call openFile
 	cmp eax, FILE_UNREAD
 	je quit
-
 	call closeInputFile
-	call Crlf
 	
 	; Add top divider
 	mov eax, yellow + (black * 16)
@@ -85,96 +91,54 @@ MainGameLoop:
     mov  eax, TICK    
     call Delay           ; Delay to ensure proper key read
 
-	; If 2 seconds has passed, move text up one line
+	; If time to print another line of text prompt, do so
 	inc linePrintTicksElapsed
 	mov al, lineProgressSpeed
 	cmp linePrintTicksElapsed, al
-	jne KeyRead
+	jne KeyRead						; Else, read key
 
-	sub lineProgressSpeed, 1		; Increase the speed of progression
+	; If reached top of play area, game over
 	dec distanceFromTop
-	cmp distanceFromTop, -1			; Game over if reached top of play area
+	cmp distanceFromTop, -1			
 	je quit
-	mov linePrintTicksElapsed, 0
 
-	; Push cursor position to stack
-	movzx ax, cursorX
-	push ax
-	movzx ax, cursorY
-	push ax
-
-	; Set cursor position to rewrite block of text
-	mov dh, distanceFromTop
-	add dh, VERTICAL_OFFSET
-	mov dl, HORIZONTAL_OFFSET
-	call UpdateCursorPos
-
-	; Write text block
-	add linePrintCharIdx, LINE_LENGTH
-	mov edx, OFFSET typingPrompt
-	mov ecx, linePrintCharIdx
-	mov ebx, typingPromptLeftBound
-	call PrintWithLineBreaks
-
-	; Move cursor to line below
-	call NewLine
-	cmp cursorY, VERTICAL_OFFSET + STARTING_DISTANCE
-	je ReturnToOriginalPos
-	
-	; Write blank lines to clear old text
-	call ClearDisplayLine
-	
-ReturnToOriginalPos:
-	; Pop original cursor position to return to former position
-	pop ax
-	dec al
-	mov dh, al
-	pop ax
-	mov dl, al
-	call UpdateCursorPos
+	call NewPromptLine				; Print a new line of prompt
+	sub lineProgressSpeed, 1		; Increase the speed of progression
+	mov linePrintTicksElapsed, 0	; Reset tick counter for display
 
 KeyRead:
+    call ReadKey			; look for keyboard input
+    jz   MainGameLoop		; no key pressed yet
 
-    call ReadKey         ; look for keyboard input
-    jz   MainGameLoop      ; no key pressed yet
+	; If at bottom of play area, don't do anything
+	cmp cursorY, VERTICAL_OFFSET + STARTING_DISTANCE
+	je MainGameLoop
 	
 	; Check if backspace pressed
 	cmp dx, VK_BACK
-	jne checkCharEqual
+	jne checkCharEqual				; If not backspace, process inputted character
 
-	; Backspace pressed
-	cmp cursorX, HORIZONTAL_OFFSET                 ; If on char 0, don't do anything
+	; Backspace was pressed
+	cmp cursorX, HORIZONTAL_OFFSET	; If on char 0, don't do anything
 	je MainGameLoop
-	
-	; Replacing the previous char
-	dec cursorX
-	dec charIdx                    ; Move cursor to previous char
-	mov esi, charIdx
-	mov dh, cursorY
-	mov dl, cursorX
-	call UpdateCursorPos
 
-	mov eax, black + (white * 16)  ; Reverting color of char
-	call UpdateChar
-	call Gotoxy                    ; Move cursor back to previous char's space
-	jmp MainGameLoop                 ; Return to loop start
+	call ReplacePreviousChar
+	jmp MainGameLoop
 
 checkCharEqual:
-	inc cursorX
-
-	mov esi, charIdx
 	; Compare input with text
-	cmp    al, typingPrompt[esi]
+	mov edi, charIdx
+	cmp    al, typingPrompt[edi]
 	jne    charNotEqual
 
 	; If character is equal
 	mov eax, white + (green * 16)
-	call UpdateChar
+	call WriteToColorArr
 	jmp lineEndCheck
 
 charNotEqual:
 	mov eax, white + (red * 16)
-	call UpdateChar
+	call WriteToColorArr
 
 lineEndCheck:
 	cmp cursorX, LINE_LENGTH + HORIZONTAL_OFFSET
@@ -192,7 +156,7 @@ lineEndCheck:
 finishCheck:
 	inc    charIdx
 	; If not finished yet
-	cmp    typingPrompt[esi + 1], 0
+	cmp    typingPrompt[edi + 1], 0
 	jne    MainGameLoop
 
 	; Level complete message
@@ -251,32 +215,71 @@ quit:
 openFile endp
 
 
-closeInputFile proc
+;-------------------------------------------------------------------------------
+; CloseInputFile
+;
+; Closes the file currently in fileHandle.
+;-------------------------------------------------------------------------------
+CloseInputFile proc USES eax
 	mov eax, fileHandle
 	call CloseFile
 	ret
-closeInputFile endp
+CloseInputFile endp
 
 
-; EBX = Index of character in array to write
-WriteColorChar proc uses ecx
-	inc cursorX
-	mov ecx, OFFSET colors
+;-------------------------------------------------------------------------------
+; NewPromptLine
+;
+; Writes a new line in the typing prompt.
+;-------------------------------------------------------------------------------
+NewPromptLine proc USES eax ebx ecx edx
+	; Push cursor position to stack
+	movzx ax, cursorX
+	push ax
+	movzx ax, cursorY
+	push ax
 
-	mov eax, [ecx + (ebx * TYPE colors)]
-	call SetTextColor
+	; Set cursor position to rewrite block of text
+	mov dh, distanceFromTop
+	add dh, VERTICAL_OFFSET
+	mov dl, HORIZONTAL_OFFSET
+	call UpdateCursorPos
 
-	mov al, [edx + ebx]
-	call WriteChar
+	; Write text block
+	add linePrintCharIdx, LINE_LENGTH
+	mov edx, OFFSET typingPrompt
+	mov ecx, linePrintCharIdx
+	mov ebx, typingPromptLeftBound
+	call ReprintPrompt
 	
+	call NewLine	; Move cursor to line below written prompt
+
+	; If cursor is not at bottom of play area, clear the display line below prompt
+	cmp cursorY, VERTICAL_OFFSET + STARTING_DISTANCE
+	je ReturnToOriginalPos
+	call ClearDisplayLine
+	
+ReturnToOriginalPos:
+	; Pop original cursor position to return to former position
+	pop ax
+	dec al			; Cursor y has to decrement to account for prompt having moved
+	mov dh, al
+	pop ax
+	mov dl, al
+	call UpdateCursorPos
 	ret
-WriteColorChar endp
+NewPromptLine endp
 
 
-; EDX = Offset of string
-; ECX = The index to stop at
-; EBX = The index to start from
-PrintWithLineBreaks proc
+;-------------------------------------------------------------------------------
+; ReprintPrompt
+;
+; Reprints typing prompt using colors from text colors from colors array
+; Receives: EDX = OFFSET of typing prompt
+;			EBX = The index of typing prompt to start printing from
+;			ECX = The index of typing prompt to stop printing at
+;-------------------------------------------------------------------------------
+ReprintPrompt proc USES edi
  	mov edi, 0				; Counter for if line length was reached
 	mov al, [edx + ebx]
 
@@ -288,7 +291,7 @@ printLoop:
 	mov edi, 0
 
 writeChars:
-	call WriteColorChar
+	call WriteFromColorArr
 
 	; Break if end of string
 	inc ebx
@@ -306,9 +309,54 @@ continuePrintLoop:
 	
 quit:
 	ret
-PrintWithLineBreaks endp
+ReprintPrompt endp
 
 
+;-------------------------------------------------------------------------------
+; WriteFromColorArr
+;
+; Writes a colored character to display using colors from text colors array.
+; Receives: EBX = Index of character in array to write
+;-------------------------------------------------------------------------------
+WriteFromColorArr proc USES ecx
+	inc cursorX
+	mov ecx, OFFSET textColors	; Get a reference to text colors array
+
+	mov eax, [ecx + (ebx * TYPE textColors)]	; Select color from array
+	call SetTextColor
+
+	mov al, [edx + ebx]			; Write character in selected color
+	call WriteChar
+	
+	ret
+WriteFromColorArr endp
+
+
+;-------------------------------------------------------------------------------
+; WriteToColorArr
+;
+; Writes a charater in a given color and saves that color to textColors array.
+; Receives: EAX = the color to write in and save to textColors array
+;			EDI = the index of color array to write to.
+;-------------------------------------------------------------------------------
+WriteToColorArr proc
+	call SetTextColor
+	mov textColors[edi * TYPE textColors], ax	; Save color
+	movzx eax, typingPrompt[edi]
+	call WriteChar
+	inc cursorX
+	ret
+WriteToColorArr endp
+
+
+;-------------------------------------------------------------------------------
+; UpdateCursorPos
+;
+; Moves cursor to an (x,y) coordinate on screen and updates cursor location
+; varaibles accordingly.
+; Receives: DL = the x position to set cursor to
+;			DH = the y position to set cursor to
+;-------------------------------------------------------------------------------
 UpdateCursorPos proc
 	mov cursorX, dl
 	mov cursorY, dh
@@ -317,7 +365,12 @@ UpdateCursorPos proc
 UpdateCursorPos endp
 
 
-NewLine proc uses edx
+;-------------------------------------------------------------------------------
+; NewLine
+;
+; Moves cursor to the next line in play area.
+;-------------------------------------------------------------------------------
+NewLine proc USES edx
 	inc cursorY
 	mov dh, cursorY
 	mov dl, HORIZONTAL_OFFSET
@@ -326,7 +379,12 @@ NewLine proc uses edx
 NewLine endp
 
 
-ClearDisplayLine proc uses eax
+;-------------------------------------------------------------------------------
+; ClearDisplayLine
+;
+; Clears a line of the play area starting from cursor's x coordinate.
+;-------------------------------------------------------------------------------
+ClearDisplayLine proc USES eax
 	mov eax, white+(black*16)
 	call SetTextColor
 
@@ -340,13 +398,26 @@ spaceWrite:
 ClearDisplayLine endp
 
 
-; EAX = the color to write in and save to colors array
-UpdateChar proc
-	call SetTextColor
-	mov colors[esi * TYPE colors], ax	; Save color
-	movzx eax, typingPrompt[esi]
-	call WriteChar
+;-------------------------------------------------------------------------------
+; ReplacePreviousChar
+;
+; Reverts color of previous character in play area and updates text color array
+; accordingly.
+;-------------------------------------------------------------------------------
+ReplacePreviousChar proc
+	dec cursorX
+	mov dh, cursorY
+	mov dl, cursorX
+	call UpdateCursorPos           ; Move cursor to previous char
+
+	mov eax, black + (white * 16)  ; Reverting color of char (this moves cursor forward)
+	dec charIdx         
+	mov edi, charIdx
+	call WriteToColorArr
+
+	call UpdateCursorPos           ; Move cursor back to previous char's space
+
 	ret
-UpdateChar endp
+ReplacePreviousChar endp
 
 end main
