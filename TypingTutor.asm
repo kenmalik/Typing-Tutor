@@ -47,10 +47,6 @@ main proc
 	mov eax, black + (white * 16)
 	call SetTextColor
 
-	mov dh, VERTICAL_OFFSET
-	mov dl, HORIZONTAL_OFFSET
-	call UpdateCursorPos
-
 	; Write prompt from file
 	mov eax, black + (white * 16)
 	call SetTextColor
@@ -63,7 +59,9 @@ main proc
 	call closeInputFile
 	call Crlf
 	
+	; Initial cursor positioning
 	mov dh, VERTICAL_OFFSET
+	add dh, distanceFromTop
 	mov dl, HORIZONTAL_OFFSET
 	call UpdateCursorPos
 
@@ -72,14 +70,8 @@ MainGameLoop:
     mov  eax, TICK    
     call Delay           ; Delay to ensure proper key read
 
+	; --- WORK IN PROGRESS ---
 
-;	; --- WORK IN PROGRESS ---
-;
-;	; Skip line writing if reached end of prompt
-;	mov eax, typingPromptSize
-;	cmp linePrintCharIdx, eax		; If linePrintCharIdx >= typingPromptSize
-;	jae KeyRead						; don't move cursor down
-;
 	inc linePrintTicksElapsed
 	cmp linePrintTicksElapsed, SECOND_IN_TICKS * 2
 	jne KeyRead
@@ -88,9 +80,12 @@ MainGameLoop:
 	mov linePrintTicksElapsed, 0
 	movzx ax, cursorX
 	push ax
-	
+	movzx ax, cursorY
+	push ax
+
 	; Set cursor position
 	mov dh, distanceFromTop
+	add dh, VERTICAL_OFFSET
 	mov dl, HORIZONTAL_OFFSET
 	call updateCursorPos
 
@@ -106,55 +101,17 @@ MainGameLoop:
 	; Write blank lines to clear old text
 	call ClearLine
 
-	; Set cursor position
-	mov dh, distanceFromTop
+	call DebugCursorPos
+
+	; Reset cursor position
 	pop ax
-	mov cursorX, al
-	mov dl, cursorX
+	dec al
+	mov dh, al
+	pop ax
+	mov dl, al
 	call updateCursorPos
 
-;
-;	; If time to write another line
-;
-;	mov eax, black + (white * 16)  ; Set to standard color
-;	call SetTextColor
-;
-;	; Write previously written text
-;	mov dh, cursorX
-;	add dh, VERTICAL_OFFSET
-;	add dh, distanceFromTop
-;	mov dl, cursorY
-;	add dl, HORIZONTAL_OFFSET
-;	call Gotoxy
-;
-;	mov edx, OFFSET typingPrompt
-;	mov ebx, 1
-;	call WriteUntil
-;
-;	; Write new line of text
-;	mov dh, linePrintLineNum		; Move to proper cursor position
-;	add dh, VERTICAL_OFFSET
-;	add dh, distanceFromTop
-;	mov dl, HORIZONTAL_OFFSET
-;	call Gotoxy
-;
-;	mov edx, OFFSET typingPrompt
-;	mov ebx, linePrintCharIdx
-;	call WriteLine
-;	mov linePrintCharIdx, ebx		; Update character index after writing
-;	mov linePrintTicksElapsed, 0	; Reset ticks elapsed
-;
-;	mov dh, cursorX
-;	add dh, VERTICAL_OFFSET
-;	add dh, distanceFromTop
-;	mov dl, cursorY
-;	add dl, HORIZONTAL_OFFSET
-;	call Gotoxy
-;
-;	inc linePrintLineNum
-;	dec distanceFromTop
-;
-;	; ------------------------
+	; ------------------------
 
 KeyRead:
 
@@ -170,13 +127,11 @@ KeyRead:
 	je MainGameLoop
 	
 	; Replacing the previous char
-	dec cursorY
+	dec cursorX
 	dec charIdx                    ; Move cursor to previous char
 	mov dh, cursorX
-	add dh, VERTICAL_OFFSET
 	mov dl, cursorY
-	add dl, HORIZONTAL_OFFSET
-	call Gotoxy
+	call UpdateCursorPos
 
 	mov eax, black + (white * 16)  ; Reverting color of char
 	call SetTextColor
@@ -207,14 +162,6 @@ lineEndCheck:
 	cmp cursorX, LINE_LENGTH + HORIZONTAL_OFFSET
 	jne finishCheck
 	call NewLine
-
-	;inc cursorX
-	;mov cursorY, 0
-	;mov dh, cursorX
-	;add dh, VERTICAL_OFFSET
-	;mov dl, cursorY
-	;add dl, HORIZONTAL_OFFSET
-	call Gotoxy
 
 finishCheck:
 	inc    charIdx
@@ -373,7 +320,6 @@ NewLine proc uses edx
 	mov dh, cursorY
 	mov dl, HORIZONTAL_OFFSET
 	call updateCursorPos
-	mGotoxy cursorX, cursorY
 	ret
 NewLine endp
 
@@ -393,5 +339,23 @@ UpdateChar proc
 	call WriteChar
 	ret
 UpdateChar endp
+
+DebugCursorPos proc uses eax
+	mGotoxy 0, 0
+	mWrite "X: "
+	mWriteSpace 2
+	mGotoxy 3, 0
+	movzx eax, cursorX
+	call WriteDec
+	call Crlf
+	mWrite "Y: "
+	mWriteSpace 2
+	mGotoxy 3, 1
+	movzx eax, cursorY
+	call WriteDec
+	
+	mGotoxy cursorX, cursorY
+	ret
+DebugCursorPos endp
 
 end main
