@@ -8,23 +8,93 @@ INCLUDE Macros.inc
 .stack 4096
 ExitProcess proto,dwExitCode:dword
 
+.data
+MenuTable BYTE '1'
+	DWORD PLAY_GAME
+EntrySize = ($ - MenuTable)
+	BYTE '2'
+	DWORD LEADERBOARD
+NumberOfEntries = ($ - MenuTable) / EntrySize
+
+.code
+main proc
+	MAIN_MENU_X_OFFSET = 30
+	MAIN_MENU_Y_OFFSET = 8
+	LINE_SPACING = 2
+
+MainMenu:
+	; Clear screen to prevent weird screen color
+	mov eax, white+(black*16)
+	call SetTextColor
+	call Clrscr
+
+	; Display title
+	mov eax, black + (yellow * 16)
+	call SetTextColor
+
+	mGotoxy MAIN_MENU_X_OFFSET, MAIN_MENU_Y_OFFSET
+	mWrite "    TYPING TUTOR    "
+
+	; Display menu options
+	mov eax, yellow+(black*16)
+	call SetTextColor
+
+	mGotoxy MAIN_MENU_X_OFFSET, MAIN_MENU_Y_OFFSET + LINE_SPACING
+	mWrite "1. Play Game"
+
+	mGotoxy MAIN_MENU_X_OFFSET, MAIN_MENU_Y_OFFSET + LINE_SPACING * 2
+	mWrite "2. View Leaderboard"
+
+	mGotoxy MAIN_MENU_X_OFFSET, MAIN_MENU_Y_OFFSET + LINE_SPACING * 3
+	mWrite ">>> "
+
+	call ReadChar
+	mov ebx, OFFSET MenuTable
+	mov ecx, NumberOfEntries
+
+L1:
+	cmp al, [ebx]				; Inputted char = lookup value?
+	jne L2
+
+	call Clrscr					; Run menu procedure
+	call NEAR PTR [ebx + 1]
+	call Crlf
+	jmp MainMenu
+
+L2:
+	add ebx, EntrySize			; Go to next entry
+	loop L1
+
+	exit						; If no matching entries found, exit
+
+
+	invoke ExitProcess,0
+main endp
+
+
+;-------------------------------------------------------------------------------
+;                                 MAIN GAME
+;-------------------------------------------------------------------------------
+
+
 ; Play area bounds
-VERTICAL_OFFSET = 2
-HORIZONTAL_OFFSET = 10
+PLAY_AREA_Y_OFFSET = 2
+PLAY_AREA_X_OFFSET = 10
 LINE_LENGTH = 64
 STARTING_DISTANCE = 24
+INFO_COLUMN_X = PLAY_AREA_X_OFFSET + LINE_LENGTH + 6
+SCOREBOARD_Y = PLAY_AREA_Y_OFFSET + 4
+SCORE_LABEL_LENGTH = 20
 
 ; File reading utilities
 BUFFER_SIZE = 5000
 FILE_UNREAD = -1
 
 ; Game logic timing
-TICK = 50 ; in milliseconds
+TICK = 50	; in milliseconds
 SECOND_IN_TICKS = 20
-STARTING_PROGRESSION_SPEED = SECOND_IN_TICKS * 2
+STARTING_PROGRESSION_SPEED = SECOND_IN_TICKS * 3
 
-.code
-main proc
 
 .data
 	; Graphics elements
@@ -51,13 +121,41 @@ main proc
 	linePrintTicksElapsed BYTE 0
 	linePrintCharIdx DWORD 0
 	lineProgressSpeed BYTE STARTING_PROGRESSION_SPEED
-	
+
+	; Scores
+	charsTyped DWORD 0
+	backspacesPressed DWORD 0
+
 
 .code
-	; Clear screen to prevent weird screen color
-	mov eax, white+(black*16)
-	call SetTextColor
-	call Clrscr
+ResetGame proc
+	; Reset scores
+	mov charsTyped, 0
+	mov backspacesPressed, 0
+
+	; Reset starting distance
+	mov distanceFromTop, STARTING_DISTANCE
+
+	; Reset typing prompt data
+	mov typingPromptLeftBound, 0
+	mov charIdx, 0
+
+	; Reset timing
+	mov linePrintTicksElapsed, 0
+	mov linePrintCharIdx, 0
+	mov lineProgressSpeed, STARTING_PROGRESSION_SPEED
+
+	mov ecx, LENGTHOF textColors
+ResetColors:
+	mov textColors[ecx * TYPE textColors], black+(white*16)
+	loop ResetColors
+	mov textColors[ecx * TYPE textColors], black+(white*16)
+
+	ret
+ResetGame endp
+
+PLAY_GAME proc
+	call ResetGame
 
 	; Read file to memory
 	mov edx, OFFSET filename
@@ -66,30 +164,48 @@ main proc
 	je quit
 	call closeInputFile
 	
+	; Game title
+	mov eax, black + (yellow * 16)
+	call SetTextColor
+	mGotoxy INFO_COLUMN_X, PLAY_AREA_Y_OFFSET + 2
+	mWrite "    TYPING TUTOR    "
+
 	; Add top divider
 	mov eax, yellow + (black * 16)
 	call SetTextColor
-	mGotoxy HORIZONTAL_OFFSET, VERTICAL_OFFSET - 1
+	mGotoxy PLAY_AREA_X_OFFSET, PLAY_AREA_Y_OFFSET - 1
 	mWriteString OFFSET divider
 
 	; Add bottom divider
-	mGotoxy HORIZONTAL_OFFSET, VERTICAL_OFFSET + STARTING_DISTANCE
+	mGotoxy PLAY_AREA_X_OFFSET, PLAY_AREA_Y_OFFSET + STARTING_DISTANCE
 	mWriteString OFFSET divider
+
+	; Scoreboard labels
+	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y
+	mWrite "Characters Typed  : "
+	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING
+	mWrite "Backspaces Pressed: "
+
+	; How to exit prompt
+	mGotoxy INFO_COLUMN_X, PLAY_AREA_Y_OFFSET + STARTING_DISTANCE
+	mWrite "Press ESC to Quit"
 
 	; Set to standard color
 	mov eax, black + (white * 16)
 	call SetTextColor
 
 	; Initial cursor positioning
-	mov dh, VERTICAL_OFFSET
+	mov dh, PLAY_AREA_Y_OFFSET
 	add dh, distanceFromTop
-	mov dl, HORIZONTAL_OFFSET
+	mov dl, PLAY_AREA_X_OFFSET
 	call UpdateCursorPos
 
 
 MainGameLoop:
     mov  eax, TICK    
     call Delay           ; Delay to ensure proper key read
+
+	call UpdateScoreboard
 
 	; If time to print another line of text prompt, do so
 	inc linePrintTicksElapsed
@@ -111,21 +227,30 @@ KeyRead:
     jz   MainGameLoop		; no key pressed yet
 
 	; If at bottom of play area, don't do anything
-	cmp cursorY, VERTICAL_OFFSET + STARTING_DISTANCE
+	cmp cursorY, PLAY_AREA_Y_OFFSET + STARTING_DISTANCE
 	je MainGameLoop
-	
+
+	; Check if escape pressed
+	cmp dx, VK_ESCAPE
+	jne CheckBackspace
+	ret
+
+CheckBackspace:
 	; Check if backspace pressed
 	cmp dx, VK_BACK
 	jne checkCharEqual				; If not backspace, process inputted character
 
 	; Backspace was pressed
-	cmp cursorX, HORIZONTAL_OFFSET	; If on char 0, don't do anything
+	cmp cursorX, PLAY_AREA_X_OFFSET	; If on char 0, don't do anything
 	je MainGameLoop
 
+	inc backspacesPressed
 	call ReplacePreviousChar
 	jmp MainGameLoop
 
 checkCharEqual:
+	inc charsTyped
+
 	; Compare input with text
 	mov edi, charIdx
 	cmp    al, typingPrompt[edi]
@@ -141,12 +266,12 @@ charNotEqual:
 	call WriteToColorArr
 
 lineEndCheck:
-	cmp cursorX, LINE_LENGTH + HORIZONTAL_OFFSET
+	cmp cursorX, LINE_LENGTH + PLAY_AREA_X_OFFSET
 	jne finishCheck
 
 	; Clear completed lines
 	mov dh, cursorY
-	mov dl, HORIZONTAL_OFFSET
+	mov dl, PLAY_AREA_X_OFFSET
 	call UpdateCursorPos					; Move cursor position for display clearing
 	call ClearDisplayLine
 	call NewLine
@@ -157,6 +282,7 @@ finishCheck:
 	inc    charIdx
 	; If not finished yet
 	cmp    typingPrompt[edi + 1], 0
+
 	jne    MainGameLoop
 
 	; Level complete message
@@ -170,9 +296,28 @@ finishCheck:
 quit:
 	mov eax, white + (black * 16)
 	call SetTextColor
-	mGotoxy 0, VERTICAL_OFFSET + STARTING_DISTANCE + 4
-	invoke ExitProcess,0
-main endp
+	mGotoxy 0, PLAY_AREA_Y_OFFSET + STARTING_DISTANCE + 4
+	ret
+PLAY_GAME endp
+
+
+;-------------------------------------------------------------------------------
+;                                LEADERBOARD
+;-------------------------------------------------------------------------------
+
+
+.code
+LEADERBOARD proc
+	mWrite "Not implemented"
+	call ReadChar
+	ret
+LEADERBOARD endp
+
+
+
+;-------------------------------------------------------------------------------
+;                                PROCEDURES
+;-------------------------------------------------------------------------------
 
 
 ;-------------------------------------------------------------------------------
@@ -241,8 +386,8 @@ NewPromptLine proc USES eax ebx ecx edx
 
 	; Set cursor position to rewrite block of text
 	mov dh, distanceFromTop
-	add dh, VERTICAL_OFFSET
-	mov dl, HORIZONTAL_OFFSET
+	add dh, PLAY_AREA_Y_OFFSET
+	mov dl, PLAY_AREA_X_OFFSET
 	call UpdateCursorPos
 
 	; Write text block
@@ -255,7 +400,7 @@ NewPromptLine proc USES eax ebx ecx edx
 	call NewLine	; Move cursor to line below written prompt
 
 	; If cursor is not at bottom of play area, clear the display line below prompt
-	cmp cursorY, VERTICAL_OFFSET + STARTING_DISTANCE
+	cmp cursorY, PLAY_AREA_Y_OFFSET + STARTING_DISTANCE
 	je ReturnToOriginalPos
 	call ClearDisplayLine
 	
@@ -373,7 +518,7 @@ UpdateCursorPos endp
 NewLine proc USES edx
 	inc cursorY
 	mov dh, cursorY
-	mov dl, HORIZONTAL_OFFSET
+	mov dl, PLAY_AREA_X_OFFSET
 	call UpdateCursorPos
 	ret
 NewLine endp
@@ -391,7 +536,7 @@ ClearDisplayLine proc USES eax
 spaceWrite:
 	mWriteSpace
 	inc cursorX
-	cmp cursorX, HORIZONTAL_OFFSET + LINE_LENGTH
+	cmp cursorX, PLAY_AREA_X_OFFSET + LINE_LENGTH
 	jne spaceWrite
 	
 	ret
@@ -419,5 +564,36 @@ ReplacePreviousChar proc
 
 	ret
 ReplacePreviousChar endp
+
+
+
+UpdateScoreboard proc USES eax edx
+	; Push cursor position to stack
+	movzx ax, cursorX
+	push ax
+	movzx ax, cursorY
+	push ax
+
+	mov eax, yellow+(black*16)
+	call SetTextColor
+
+	mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y
+	mov eax, charsTyped
+	call WriteDec
+
+	mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y + LINE_SPACING
+	mov eax, backspacesPressed
+	call WriteDec
+
+	; Pop original cursor position to return to former position
+	pop ax
+	mov dh, al
+	pop ax
+	mov dl, al
+	call UpdateCursorPos
+
+	ret
+UpdateScoreboard endp
+
 
 end main
