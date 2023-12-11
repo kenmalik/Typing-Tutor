@@ -111,6 +111,7 @@ STARTING_PROGRESSION_SPEED = SECOND_IN_TICKS * 3
 	typingPromptLeftBound DWORD 0
 	charIdx DWORD 0
 	textColors WORD LENGTHOF typingPrompt - 1 DUP(black+(white*16)), 0
+	lineStatus DWORD 0, 0
 
 	; Cursor position data
 	cursorX BYTE 0
@@ -122,38 +123,12 @@ STARTING_PROGRESSION_SPEED = SECOND_IN_TICKS * 3
 	linePrintCharIdx DWORD 0
 	lineProgressSpeed BYTE STARTING_PROGRESSION_SPEED
 
-	; Scores
+	; Score counters
 	charsTyped DWORD 0
 	backspacesPressed DWORD 0
 
 
 .code
-ResetGame proc
-	; Reset scores
-	mov charsTyped, 0
-	mov backspacesPressed, 0
-
-	; Reset starting distance
-	mov distanceFromTop, STARTING_DISTANCE
-
-	; Reset typing prompt data
-	mov typingPromptLeftBound, 0
-	mov charIdx, 0
-
-	; Reset timing
-	mov linePrintTicksElapsed, 0
-	mov linePrintCharIdx, 0
-	mov lineProgressSpeed, STARTING_PROGRESSION_SPEED
-
-	mov ecx, LENGTHOF textColors
-ResetColors:
-	mov textColors[ecx * TYPE textColors], black+(white*16)
-	loop ResetColors
-	mov textColors[ecx * TYPE textColors], black+(white*16)
-
-	ret
-ResetGame endp
-
 PLAY_GAME proc
 	call ResetGame
 
@@ -246,6 +221,7 @@ CheckBackspace:
 
 	inc backspacesPressed
 	call ReplacePreviousChar
+	call RevertLineStatus
 	jmp MainGameLoop
 
 checkCharEqual:
@@ -254,22 +230,25 @@ checkCharEqual:
 	; Compare input with text
 	mov edi, charIdx
 	cmp    al, typingPrompt[edi]
-	jne    charNotEqual
+	jne    CharNotEqual
 
 	; If character is equal
 	mov eax, white + (green * 16)
 	call WriteToColorArr
-	jmp lineEndCheck
+	call CorrectInput
+	jmp LineEndCheck
 
-charNotEqual:
+CharNotEqual:
 	mov eax, white + (red * 16)
 	call WriteToColorArr
+	call WrongInput
 
-lineEndCheck:
+LineEndCheck:
 	cmp cursorX, LINE_LENGTH + PLAY_AREA_X_OFFSET
 	jne finishCheck
 
 	; Clear completed lines
+	;call ClearLineStatus
 	mov dh, cursorY
 	mov dl, PLAY_AREA_X_OFFSET
 	call UpdateCursorPos					; Move cursor position for display clearing
@@ -585,6 +564,24 @@ UpdateScoreboard proc USES eax edx
 	mov eax, backspacesPressed
 	call WriteDec
 
+	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 2
+	mov eax, lineStatus
+	call WriteBin
+
+	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 3
+	mov eax, lineStatus[TYPE lineStatus]
+	call WriteBin
+
+	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 4
+	call CheckLineStatus
+	jnc NotComplete
+	mWrite "Line complete"
+	jmp Complete
+
+NotComplete:
+	mWrite "Line not complete"
+Complete:
+
 	; Pop original cursor position to return to former position
 	pop ax
 	mov dh, al
@@ -594,6 +591,147 @@ UpdateScoreboard proc USES eax edx
 
 	ret
 UpdateScoreboard endp
+
+
+ResetGame proc
+	; Reset scores
+	mov charsTyped, 0
+	mov backspacesPressed, 0
+
+	; Reset starting distance
+	mov distanceFromTop, STARTING_DISTANCE
+
+	; Reset typing prompt data
+	mov typingPromptLeftBound, 0
+	mov charIdx, 0
+
+
+	; Reset timing
+	mov linePrintTicksElapsed, 0
+	mov linePrintCharIdx, 0
+	mov lineProgressSpeed, STARTING_PROGRESSION_SPEED
+
+	mov ecx, LENGTHOF textColors - 1
+ResetColors:
+	mov textColors[ecx * TYPE textColors], black+(white*16)
+	loop ResetColors
+	mov textColors[ecx * TYPE textColors], black+(white*16)
+
+	mov ecx, LENGTHOF lineStatus - 1
+ResetLineStatus:
+	mov lineStatus[ecx * TYPE lineStatus], 0
+	loop ResetColors
+	mov lineStatus[ecx * TYPE lineStatus], 0
+
+	ret
+ResetGame endp
+
+
+;-------------------------------------------------------------------------------
+; CorrectInput
+;
+; Updates line status bit string to reflect correct input.
+;-------------------------------------------------------------------------------
+CorrectInput proc USES eax
+	mov eax, lineStatus[0]
+	shrd lineStatus[TYPE lineStatus], eax, 1
+	mov eax, 1
+	shrd lineStatus[0], eax, 1
+	ret
+CorrectInput endp
+
+
+;-------------------------------------------------------------------------------
+; WrongInput
+;
+; Updates line status bit string to reflect incorrect input.
+;-------------------------------------------------------------------------------
+WrongInput proc USES eax
+	mov eax, lineStatus[0]
+	shrd lineStatus[TYPE lineStatus], eax, 1
+	shr lineStatus[0], 1
+	ret
+WrongInput endp
+
+
+;-------------------------------------------------------------------------------
+; RevertLineStatus
+;
+; Reverts last change to line status bit string.
+;-------------------------------------------------------------------------------
+RevertLineStatus proc USES eax
+	mov eax, lineStatus[TYPE lineStatus]
+	shld lineStatus[0], eax, 1
+	shl lineStatus[TYPE lineStatus], 1
+	ret
+RevertLineStatus endp
+
+
+;-------------------------------------------------------------------------------
+; ClearLineStatus
+;
+; Sets line status bit string to zeros.
+;-------------------------------------------------------------------------------
+ClearLineStatus proc USES eax
+	mov ecx, LENGTHOF lineStatus - 1
+StatusClearing:
+	mov lineStatus[ecx * TYPE lineStatus], 0
+	loop StatusClearing
+	mov lineStatus[ecx * TYPE lineStatus], 0
+
+	ret
+ClearLineStatus endp
+
+
+;-------------------------------------------------------------------------------
+; CheckLineStatus
+;
+; Reverts last change to line status bit string.
+; Recieves: EBX = left bound of typing prompt
+; Returns : CY = 0 if line not completely correct
+;			CY = 1 if line is completely correct
+;-------------------------------------------------------------------------------
+CheckLineStatus proc USES eax ebx ecx edx
+	mov ecx, LENGTHOF typingPrompt - 1
+	sub ecx, ebx
+	mov edx, 0		; Counter for how many times rotated
+
+	cmp ecx, LINE_LENGTH
+	jbe L_LineCheck
+	mov ecx, LINE_LENGTH
+
+L_LineCheck:
+	mov eax, lineStatus[0]
+	shld lineStatus[TYPE lineStatus], eax, 1
+	rcl lineStatus[0], 1
+	inc edx
+	jnc IncorrectChar
+	loop L_LineCheck
+
+	mov edi, 1
+	jmp ReturnBits
+
+IncorrectChar:
+	mov edi, 0
+
+ReturnBits:
+	mov ecx, edx
+L_ReturnBits:
+	mov eax, lineStatus[TYPE lineStatus]
+	shrd lineStatus[0], eax, 1
+	rcr lineStatus[TYPE lineStatus], 1
+	loop L_ReturnBits
+
+	cmp edi, 1
+	jne LineIsIncorrect
+	stc
+	jmp LineIsCorrect
+
+LineIsIncorrect:
+	clc
+LineIsCorrect:
+	ret
+CheckLineStatus endp
 
 
 end main
