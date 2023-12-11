@@ -573,6 +573,7 @@ UpdateScoreboard proc USES eax edx
 	call WriteBin
 
 	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 4
+	mov ebx, typingPromptLeftBound
 	call CheckLineStatus
 	jnc NotComplete
 	mWrite "Line complete"
@@ -692,13 +693,16 @@ ClearLineStatus endp
 ;			CY = 1 if line is completely correct
 ;-------------------------------------------------------------------------------
 CheckLineStatus proc USES eax ebx ecx edx
-	mov ecx, LENGTHOF typingPrompt - 1
+	mov ecx, typingPromptSize
 	sub ecx, ebx
 	mov edx, 0		; Counter for how many times rotated
 
 	cmp ecx, LINE_LENGTH
-	jbe L_LineCheck
+	jbe IncompleteLine
 	mov ecx, LINE_LENGTH
+
+IncompleteLine:
+	dec ecx
 
 L_LineCheck:
 	mov eax, lineStatus[0]

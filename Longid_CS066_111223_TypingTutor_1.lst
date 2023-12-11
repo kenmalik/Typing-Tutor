@@ -1,4 +1,4 @@
-Microsoft (R) Macro Assembler Version 14.38.33133.0	    12/11/23 12:06:21
+Microsoft (R) Macro Assembler Version 14.38.33133.0	    12/11/23 12:20:37
 TypingTutor.asm						     Page 1 - 1
 
 
@@ -228,7 +228,7 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 
  000000BA			.code
  000000BA			PLAY_GAME proc
- 000000BA  E8 0000049D			call ResetGame
+ 000000BA  E8 000004A3			call ResetGame
 
 					; Read file to memory
  000000BF  BA 00001429 R		mov edx, OFFSET filename
@@ -405,7 +405,7 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 
  000001FC  FF 05 00003B63 R		inc backspacesPressed
  00000202  E8 00000272			call ReplacePreviousChar
- 00000207  E8 00000403			call RevertLineStatus
+ 00000207  E8 00000409			call RevertLineStatus
  0000020C  EB 80			jmp MainGameLoop
 
  0000020E			checkCharEqual:
@@ -419,13 +419,13 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 					; If character is equal
  00000222  B8 0000002F			mov eax, white + (green * 16)
  00000227  E8 000001CF			call WriteToColorArr
- 0000022C  E8 000003AB			call CorrectInput
+ 0000022C  E8 000003B1			call CorrectInput
  00000231  EB 0F			jmp LineEndCheck
 
  00000233			CharNotEqual:
  00000233  B8 0000004F			mov eax, white + (red * 16)
  00000238  E8 000001BE			call WriteToColorArr
- 0000023D  E8 000003B7			call WrongInput
+ 0000023D  E8 000003BD			call WrongInput
 
  00000242			LineEndCheck:
  00000242  80 3D 00003B56 R		cmp cursorX, LINE_LENGTH + PLAY_AREA_X_OFFSET
@@ -884,96 +884,97 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
  00000523  B2 50	     1		mov  dl,INFO_COLUMN_X
  00000525  E8 00000000 E     1		call Gotoxy
  0000052A  5A		     1		pop  edx
- 0000052B  E8 00000115			call CheckLineStatus
- 00000530  73 0E			jnc NotComplete
+ 0000052B  8B 1D 00001436 R		mov ebx, typingPromptLeftBound
+ 00000531  E8 00000115			call CheckLineStatus
+ 00000536  73 0E			jnc NotComplete
 					mWrite "Line complete"
  00003C19		     1		.data		
  00003C19 4C 69 6E 65 20     1		??000D BYTE "Line complete",0	
 	   63 6F 6D 70 6C
 	   65 74 65 00
- 00000532		     1		.code
- 00000532  52		     1		push	edx
- 00000533  BA 00003C19 R     1		mov	edx,OFFSET ??000D
- 00000538  E8 00000000 E     1		call	WriteString
- 0000053D  5A		     1		pop	edx
- 0000053E  EB 0C			jmp Complete
+ 00000538		     1		.code
+ 00000538  52		     1		push	edx
+ 00000539  BA 00003C19 R     1		mov	edx,OFFSET ??000D
+ 0000053E  E8 00000000 E     1		call	WriteString
+ 00000543  5A		     1		pop	edx
+ 00000544  EB 0C			jmp Complete
 
- 00000540			NotComplete:
+ 00000546			NotComplete:
 					mWrite "Line not complete"
  00003C27		     1		.data		
  00003C27 4C 69 6E 65 20     1		??000E BYTE "Line not complete",0	
 	   6E 6F 74 20 63
 	   6F 6D 70 6C 65
 	   74 65 00
- 00000540		     1		.code
- 00000540  52		     1		push	edx
- 00000541  BA 00003C27 R     1		mov	edx,OFFSET ??000E
- 00000546  E8 00000000 E     1		call	WriteString
- 0000054B  5A		     1		pop	edx
- 0000054C			Complete:
+ 00000546		     1		.code
+ 00000546  52		     1		push	edx
+ 00000547  BA 00003C27 R     1		mov	edx,OFFSET ??000E
+ 0000054C  E8 00000000 E     1		call	WriteString
+ 00000551  5A		     1		pop	edx
+ 00000552			Complete:
 
 					; Pop original cursor position to return to former position
- 0000054C  66| 58			pop ax
- 0000054E  8A F0			mov dh, al
- 00000550  66| 58			pop ax
- 00000552  8A D0			mov dl, al
- 00000554  E8 FFFFFEC2			call UpdateCursorPos
+ 00000552  66| 58			pop ax
+ 00000554  8A F0			mov dh, al
+ 00000556  66| 58			pop ax
+ 00000558  8A D0			mov dl, al
+ 0000055A  E8 FFFFFEBC			call UpdateCursorPos
 
 					ret
- 00000559  5A		   *	    pop    edx
- 0000055A  58		   *	    pop    eax
- 0000055B  C3		   *	    ret    00000h
- 0000055C			UpdateScoreboard endp
+ 0000055F  5A		   *	    pop    edx
+ 00000560  58		   *	    pop    eax
+ 00000561  C3		   *	    ret    00000h
+ 00000562			UpdateScoreboard endp
 
 
- 0000055C			ResetGame proc
+ 00000562			ResetGame proc
 					; Reset scores
- 0000055C  C7 05 00003B5F R		mov charsTyped, 0
+ 00000562  C7 05 00003B5F R		mov charsTyped, 0
 	   00000000
- 00000566  C7 05 00003B63 R		mov backspacesPressed, 0
+ 0000056C  C7 05 00003B63 R		mov backspacesPressed, 0
 	   00000000
 
 					; Reset starting distance
- 00000570  C6 05 00003B58 R		mov distanceFromTop, STARTING_DISTANCE
+ 00000576  C6 05 00003B58 R		mov distanceFromTop, STARTING_DISTANCE
 	   18
 
 					; Reset typing prompt data
- 00000577  C7 05 00001436 R		mov typingPromptLeftBound, 0
+ 0000057D  C7 05 00001436 R		mov typingPromptLeftBound, 0
 	   00000000
- 00000581  C7 05 0000143A R		mov charIdx, 0
+ 00000587  C7 05 0000143A R		mov charIdx, 0
 	   00000000
 
 
 					; Reset timing
- 0000058B  C6 05 00003B59 R		mov linePrintTicksElapsed, 0
+ 00000591  C6 05 00003B59 R		mov linePrintTicksElapsed, 0
 	   00
- 00000592  C7 05 00003B5A R		mov linePrintCharIdx, 0
+ 00000598  C7 05 00003B5A R		mov linePrintCharIdx, 0
 	   00000000
- 0000059C  C6 05 00003B5E R		mov lineProgressSpeed, STARTING_PROGRESSION_SPEED
+ 000005A2  C6 05 00003B5E R		mov lineProgressSpeed, STARTING_PROGRESSION_SPEED
 	   3C
 
- 000005A3  B9 00001387			mov ecx, LENGTHOF textColors - 1
- 000005A8			ResetColors:
- 000005A8  66| C7 04 4D			mov textColors[ecx * TYPE textColors], black+(white*16)
+ 000005A9  B9 00001387			mov ecx, LENGTHOF textColors - 1
+ 000005AE			ResetColors:
+ 000005AE  66| C7 04 4D			mov textColors[ecx * TYPE textColors], black+(white*16)
 	   0000143E R
 	   00F0
- 000005B2  E2 F4			loop ResetColors
- 000005B4  66| C7 04 4D			mov textColors[ecx * TYPE textColors], black+(white*16)
+ 000005B8  E2 F4			loop ResetColors
+ 000005BA  66| C7 04 4D			mov textColors[ecx * TYPE textColors], black+(white*16)
 	   0000143E R
 	   00F0
 
- 000005BE  B9 00000001			mov ecx, LENGTHOF lineStatus - 1
- 000005C3			ResetLineStatus:
- 000005C3  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
+ 000005C4  B9 00000001			mov ecx, LENGTHOF lineStatus - 1
+ 000005C9			ResetLineStatus:
+ 000005C9  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
 	   00003B4E R
 	   00000000
- 000005CE  E2 D8			loop ResetColors
- 000005D0  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
+ 000005D4  E2 D8			loop ResetColors
+ 000005D6  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
 	   00003B4E R
 	   00000000
 
- 000005DB  C3				ret
- 000005DC			ResetGame endp
+ 000005E1  C3				ret
+ 000005E2			ResetGame endp
 
 
 				;-------------------------------------------------------------------------------
@@ -981,18 +982,18 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Updates line status bit string to reflect correct input.
 				;-------------------------------------------------------------------------------
- 000005DC			CorrectInput proc USES eax
- 000005DC  50		   *	    push   eax
- 000005DD  A1 00003B4E R		mov eax, lineStatus[0]
- 000005E2  0F AC 05			shrd lineStatus[TYPE lineStatus], eax, 1
+ 000005E2			CorrectInput proc USES eax
+ 000005E2  50		   *	    push   eax
+ 000005E3  A1 00003B4E R		mov eax, lineStatus[0]
+ 000005E8  0F AC 05			shrd lineStatus[TYPE lineStatus], eax, 1
 	   00003B52 R 01
- 000005EA  B8 00000001			mov eax, 1
- 000005EF  0F AC 05			shrd lineStatus[0], eax, 1
+ 000005F0  B8 00000001			mov eax, 1
+ 000005F5  0F AC 05			shrd lineStatus[0], eax, 1
 	   00003B4E R 01
 					ret
- 000005F7  58		   *	    pop    eax
- 000005F8  C3		   *	    ret    00000h
- 000005F9			CorrectInput endp
+ 000005FD  58		   *	    pop    eax
+ 000005FE  C3		   *	    ret    00000h
+ 000005FF			CorrectInput endp
 
 
 				;-------------------------------------------------------------------------------
@@ -1000,16 +1001,16 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Updates line status bit string to reflect incorrect input.
 				;-------------------------------------------------------------------------------
- 000005F9			WrongInput proc USES eax
- 000005F9  50		   *	    push   eax
- 000005FA  A1 00003B4E R		mov eax, lineStatus[0]
- 000005FF  0F AC 05			shrd lineStatus[TYPE lineStatus], eax, 1
+ 000005FF			WrongInput proc USES eax
+ 000005FF  50		   *	    push   eax
+ 00000600  A1 00003B4E R		mov eax, lineStatus[0]
+ 00000605  0F AC 05			shrd lineStatus[TYPE lineStatus], eax, 1
 	   00003B52 R 01
- 00000607  D1 2D 00003B4E R		shr lineStatus[0], 1
+ 0000060D  D1 2D 00003B4E R		shr lineStatus[0], 1
 					ret
- 0000060D  58		   *	    pop    eax
- 0000060E  C3		   *	    ret    00000h
- 0000060F			WrongInput endp
+ 00000613  58		   *	    pop    eax
+ 00000614  C3		   *	    ret    00000h
+ 00000615			WrongInput endp
 
 
 				;-------------------------------------------------------------------------------
@@ -1017,16 +1018,16 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Reverts last change to line status bit string.
 				;-------------------------------------------------------------------------------
- 0000060F			RevertLineStatus proc USES eax
- 0000060F  50		   *	    push   eax
- 00000610  A1 00003B52 R		mov eax, lineStatus[TYPE lineStatus]
- 00000615  0F A4 05			shld lineStatus[0], eax, 1
+ 00000615			RevertLineStatus proc USES eax
+ 00000615  50		   *	    push   eax
+ 00000616  A1 00003B52 R		mov eax, lineStatus[TYPE lineStatus]
+ 0000061B  0F A4 05			shld lineStatus[0], eax, 1
 	   00003B4E R 01
- 0000061D  D1 25 00003B52 R		shl lineStatus[TYPE lineStatus], 1
+ 00000623  D1 25 00003B52 R		shl lineStatus[TYPE lineStatus], 1
 					ret
- 00000623  58		   *	    pop    eax
- 00000624  C3		   *	    ret    00000h
- 00000625			RevertLineStatus endp
+ 00000629  58		   *	    pop    eax
+ 0000062A  C3		   *	    ret    00000h
+ 0000062B			RevertLineStatus endp
 
 
 				;-------------------------------------------------------------------------------
@@ -1034,22 +1035,22 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Sets line status bit string to zeros.
 				;-------------------------------------------------------------------------------
- 00000625			ClearLineStatus proc USES eax
- 00000625  50		   *	    push   eax
- 00000626  B9 00000001			mov ecx, LENGTHOF lineStatus - 1
- 0000062B			StatusClearing:
- 0000062B  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
+ 0000062B			ClearLineStatus proc USES eax
+ 0000062B  50		   *	    push   eax
+ 0000062C  B9 00000001			mov ecx, LENGTHOF lineStatus - 1
+ 00000631			StatusClearing:
+ 00000631  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
 	   00003B4E R
 	   00000000
- 00000636  E2 F3			loop StatusClearing
- 00000638  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
+ 0000063C  E2 F3			loop StatusClearing
+ 0000063E  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
 	   00003B4E R
 	   00000000
 
 					ret
- 00000643  58		   *	    pop    eax
- 00000644  C3		   *	    ret    00000h
- 00000645			ClearLineStatus endp
+ 00000649  58		   *	    pop    eax
+ 0000064A  C3		   *	    ret    00000h
+ 0000064B			ClearLineStatus endp
 
 
 				;-------------------------------------------------------------------------------
@@ -1060,62 +1061,65 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				; Returns : CY = 0 if line not completely correct
 				;			CY = 1 if line is completely correct
 				;-------------------------------------------------------------------------------
- 00000645			CheckLineStatus proc USES eax ebx ecx edx
- 00000645  50		   *	    push   eax
- 00000646  53		   *	    push   ebx
- 00000647  51		   *	    push   ecx
- 00000648  52		   *	    push   edx
- 00000649  B9 00001387			mov ecx, LENGTHOF typingPrompt - 1
- 0000064E  2B CB			sub ecx, ebx
- 00000650  BA 00000000			mov edx, 0		; Counter for how many times rotated
+ 0000064B			CheckLineStatus proc USES eax ebx ecx edx
+ 0000064B  50		   *	    push   eax
+ 0000064C  53		   *	    push   ebx
+ 0000064D  51		   *	    push   ecx
+ 0000064E  52		   *	    push   edx
+ 0000064F  8B 0D 00001425 R		mov ecx, typingPromptSize
+ 00000655  2B CB			sub ecx, ebx
+ 00000657  BA 00000000			mov edx, 0		; Counter for how many times rotated
 
- 00000655  83 F9 40			cmp ecx, LINE_LENGTH
- 00000658  76 05			jbe L_LineCheck
- 0000065A  B9 00000040			mov ecx, LINE_LENGTH
+ 0000065C  83 F9 40			cmp ecx, LINE_LENGTH
+ 0000065F  76 05			jbe IncompleteLine
+ 00000661  B9 00000040			mov ecx, LINE_LENGTH
 
- 0000065F			L_LineCheck:
- 0000065F  A1 00003B4E R		mov eax, lineStatus[0]
- 00000664  0F A4 05			shld lineStatus[TYPE lineStatus], eax, 1
+ 00000666			IncompleteLine:
+ 00000666  49				dec ecx
+
+ 00000667			L_LineCheck:
+ 00000667  A1 00003B4E R		mov eax, lineStatus[0]
+ 0000066C  0F A4 05			shld lineStatus[TYPE lineStatus], eax, 1
 	   00003B52 R 01
- 0000066C  D1 15 00003B4E R		rcl lineStatus[0], 1
- 00000672  42				inc edx
- 00000673  73 09			jnc IncorrectChar
- 00000675  E2 E8			loop L_LineCheck
+ 00000674  D1 15 00003B4E R		rcl lineStatus[0], 1
+ 0000067A  42				inc edx
+ 0000067B  73 09			jnc IncorrectChar
+ 0000067D  E2 E8			loop L_LineCheck
 
- 00000677  BF 00000001			mov edi, 1
- 0000067C  EB 05			jmp ReturnBits
+ 0000067F  BF 00000001			mov edi, 1
+ 00000684  EB 05			jmp ReturnBits
 
- 0000067E			IncorrectChar:
- 0000067E  BF 00000000			mov edi, 0
+ 00000686			IncorrectChar:
+ 00000686  BF 00000000			mov edi, 0
 
- 00000683			ReturnBits:
- 00000683  8B CA			mov ecx, edx
- 00000685			L_ReturnBits:
- 00000685  A1 00003B52 R		mov eax, lineStatus[TYPE lineStatus]
- 0000068A  0F AC 05			shrd lineStatus[0], eax, 1
+ 0000068B			ReturnBits:
+ 0000068B  8B CA			mov ecx, edx
+ 0000068D			L_ReturnBits:
+ 0000068D  A1 00003B52 R		mov eax, lineStatus[TYPE lineStatus]
+ 00000692  0F AC 05			shrd lineStatus[0], eax, 1
 	   00003B4E R 01
- 00000692  D1 1D 00003B52 R		rcr lineStatus[TYPE lineStatus], 1
- 00000698  E2 EB			loop L_ReturnBits
+ 0000069A  D1 1D 00003B52 R		rcr lineStatus[TYPE lineStatus], 1
+ 000006A0  E2 EB			loop L_ReturnBits
 
- 0000069A  83 FF 01			cmp edi, 1
- 0000069D  75 03			jne LineIsIncorrect
- 0000069F  F9				stc
- 000006A0  EB 01			jmp LineIsCorrect
+ 000006A2  83 FF 01			cmp edi, 1
+ 000006A5  75 03			jne LineIsIncorrect
+ 000006A7  F9				stc
+ 000006A8  EB 01			jmp LineIsCorrect
 
- 000006A2			LineIsIncorrect:
- 000006A2  F8				clc
- 000006A3			LineIsCorrect:
+ 000006AA			LineIsIncorrect:
+ 000006AA  F8				clc
+ 000006AB			LineIsCorrect:
 					ret
- 000006A3  5A		   *	    pop    edx
- 000006A4  59		   *	    pop    ecx
- 000006A5  5B		   *	    pop    ebx
- 000006A6  58		   *	    pop    eax
- 000006A7  C3		   *	    ret    00000h
- 000006A8			CheckLineStatus endp
+ 000006AB  5A		   *	    pop    edx
+ 000006AC  59		   *	    pop    ecx
+ 000006AD  5B		   *	    pop    ebx
+ 000006AE  58		   *	    pop    eax
+ 000006AF  C3		   *	    ret    00000h
+ 000006B0			CheckLineStatus endp
 
 
 				end main
-Microsoft (R) Macro Assembler Version 14.38.33133.0	    12/11/23 12:06:21
+Microsoft (R) Macro Assembler Version 14.38.33133.0	    12/11/23 12:20:37
 TypingTutor.asm						     Symbols 2 - 1
 
 
@@ -1228,29 +1232,30 @@ Segments and Groups:
 FLAT . . . . . . . . . . . . . .	GROUP
 STACK  . . . . . . . . . . . . .	32 Bit	 00001000 Para	  Stack	  'STACK'	 
 _DATA  . . . . . . . . . . . . .	32 Bit	 00003C39 Para	  Public  'DATA'	
-_TEXT  . . . . . . . . . . . . .	32 Bit	 000006A8 Para	  Public  'CODE'	
+_TEXT  . . . . . . . . . . . . .	32 Bit	 000006B0 Para	  Public  'CODE'	
 
 
 Procedures, parameters, and locals:
 
                 N a m e                 Type     Value    Attr
 
-CheckLineStatus  . . . . . . . .	P Near	 00000645 _TEXT	Length= 00000063 Public STDCALL
-  L_LineCheck  . . . . . . . . .	L Near	 0000065F _TEXT	
-  IncorrectChar  . . . . . . . .	L Near	 0000067E _TEXT	
-  ReturnBits . . . . . . . . . .	L Near	 00000683 _TEXT	
-  L_ReturnBits . . . . . . . . .	L Near	 00000685 _TEXT	
-  LineIsIncorrect  . . . . . . .	L Near	 000006A2 _TEXT	
-  LineIsCorrect  . . . . . . . .	L Near	 000006A3 _TEXT	
+CheckLineStatus  . . . . . . . .	P Near	 0000064B _TEXT	Length= 00000065 Public STDCALL
+  IncompleteLine . . . . . . . .	L Near	 00000666 _TEXT	
+  L_LineCheck  . . . . . . . . .	L Near	 00000667 _TEXT	
+  IncorrectChar  . . . . . . . .	L Near	 00000686 _TEXT	
+  ReturnBits . . . . . . . . . .	L Near	 0000068B _TEXT	
+  L_ReturnBits . . . . . . . . .	L Near	 0000068D _TEXT	
+  LineIsIncorrect  . . . . . . .	L Near	 000006AA _TEXT	
+  LineIsCorrect  . . . . . . . .	L Near	 000006AB _TEXT	
 ClearDisplayLine . . . . . . . .	P Near	 00000451 _TEXT	Length= 00000028 Public STDCALL
   spaceWrite . . . . . . . . . .	L Near	 0000045C _TEXT	
-ClearLineStatus  . . . . . . . .	P Near	 00000625 _TEXT	Length= 00000020 Public STDCALL
-  StatusClearing . . . . . . . .	L Near	 0000062B _TEXT	
+ClearLineStatus  . . . . . . . .	P Near	 0000062B _TEXT	Length= 00000020 Public STDCALL
+  StatusClearing . . . . . . . .	L Near	 00000631 _TEXT	
 CloseFile  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 CloseHandle  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 CloseInputFile . . . . . . . . .	P Near	 00000331 _TEXT	Length= 0000000D Public STDCALL
 Clrscr . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-CorrectInput . . . . . . . . . .	P Near	 000005DC _TEXT	Length= 0000001D Public STDCALL
+CorrectInput . . . . . . . . . .	P Near	 000005E2 _TEXT	Length= 0000001D Public STDCALL
 CreateFileA  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 CreateOutputFile . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 Crlf . . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -1330,10 +1335,10 @@ ReprintPrompt  . . . . . . . . .	P Near	 000003AA _TEXT	Length= 00000033 Public 
   writeChars . . . . . . . . . .	L Near	 000003C2 _TEXT	
   continuePrintLoop  . . . . . .	L Near	 000003D7 _TEXT	
   quit . . . . . . . . . . . . .	L Near	 000003DB _TEXT	
-ResetGame  . . . . . . . . . . .	P Near	 0000055C _TEXT	Length= 00000080 Public STDCALL
-  ResetColors  . . . . . . . . .	L Near	 000005A8 _TEXT	
-  ResetLineStatus  . . . . . . .	L Near	 000005C3 _TEXT	
-RevertLineStatus . . . . . . . .	P Near	 0000060F _TEXT	Length= 00000016 Public STDCALL
+ResetGame  . . . . . . . . . . .	P Near	 00000562 _TEXT	Length= 00000080 Public STDCALL
+  ResetColors  . . . . . . . . .	L Near	 000005AE _TEXT	
+  ResetLineStatus  . . . . . . .	L Near	 000005C9 _TEXT	
+RevertLineStatus . . . . . . . .	P Near	 00000615 _TEXT	Length= 00000016 Public STDCALL
 SetConsoleCursorInfo . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 SetConsoleCursorPosition . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 SetConsoleMode . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -1354,9 +1359,9 @@ Str_trim . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 Str_ucase  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 SystemTimeToFileTime . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 UpdateCursorPos  . . . . . . . .	P Near	 0000041B _TEXT	Length= 00000020 Public STDCALL
-UpdateScoreboard . . . . . . . .	P Near	 000004AC _TEXT	Length= 000000B0 Public STDCALL
-  NotComplete  . . . . . . . . .	L Near	 00000540 _TEXT	
-  Complete . . . . . . . . . . .	L Near	 0000054C _TEXT	
+UpdateScoreboard . . . . . . . .	P Near	 000004AC _TEXT	Length= 000000B6 Public STDCALL
+  NotComplete  . . . . . . . . .	L Near	 00000546 _TEXT	
+  Complete . . . . . . . . . . .	L Near	 00000552 _TEXT	
 WaitMsg  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteBinB  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteBin . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -1377,7 +1382,7 @@ WriteString  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 WriteToColorArr  . . . . . . . .	P Near	 000003FB _TEXT	Length= 00000020 Public STDCALL
 WriteToFile  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteWindowsMsg  . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-WrongInput . . . . . . . . . . .	P Near	 000005F9 _TEXT	Length= 00000016 Public STDCALL
+WrongInput . . . . . . . . . . .	P Near	 000005FF _TEXT	Length= 00000016 Public STDCALL
 main . . . . . . . . . . . . . .	P Near	 00000000 _TEXT	Length= 000000BA Public STDCALL
   MainMenu . . . . . . . . . . .	L Near	 00000000 _TEXT	
   L1 . . . . . . . . . . . . . .	L Near	 0000008E _TEXT	
