@@ -118,14 +118,16 @@ STARTING_PROGRESSION_SPEED = SECOND_IN_TICKS * 3
 	cursorY BYTE 0
 	distanceFromTop BYTE STARTING_DISTANCE
 
-	; Typing prompt display timing
+	; Game timing
 	linePrintTicksElapsed BYTE 0
 	linePrintCharIdx DWORD 0
 	lineProgressSpeed BYTE STARTING_PROGRESSION_SPEED
+	timerTicks DWORD 0
 
 	; Score counters
 	charsTyped DWORD 0
 	backspacesPressed DWORD 0
+	secondsPlayed DWORD 0
 
 
 .code
@@ -157,8 +159,10 @@ PLAY_GAME proc
 
 	; Scoreboard labels
 	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y
-	mWrite "Characters Typed  : "
+	mWrite "Minutes Survived  : "
 	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING
+	mWrite "Characters Typed  : "
+	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 2
 	mWrite "Backspaces Pressed: "
 
 	; How to exit prompt
@@ -180,6 +184,13 @@ MainGameLoop:
     mov  eax, TICK    
     call Delay           ; Delay to ensure proper key read
 
+	inc timerTicks
+	cmp timerTicks, SECOND_IN_TICKS
+	jne TimerNotSet
+	inc secondsPlayed
+	mov timerTicks, 0
+
+TimerNotSet:
 	call UpdateScoreboard
 
 	; If time to print another line of text prompt, do so
@@ -564,7 +575,11 @@ ReplacePreviousChar proc
 ReplacePreviousChar endp
 
 
-
+;-------------------------------------------------------------------------------
+; UpdateScoreboard
+;
+; Writes score information to info column.
+;-------------------------------------------------------------------------------
 UpdateScoreboard proc USES eax edx
 	; Push cursor position to stack
 	movzx ax, cursorX
@@ -576,31 +591,16 @@ UpdateScoreboard proc USES eax edx
 	call SetTextColor
 
 	mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y
+	mov eax, secondsPlayed
+	call TimeFormat
+
+	mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y + LINE_SPACING
 	mov eax, charsTyped
 	call WriteDec
 
-	mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y + LINE_SPACING
+	mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y + LINE_SPACING * 2
 	mov eax, backspacesPressed
 	call WriteDec
-
-	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 2
-	mov eax, lineStatus
-	call WriteBin
-
-	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 3
-	mov eax, lineStatus[TYPE lineStatus]
-	call WriteBin
-
-	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 4
-	mov ebx, typingPromptLeftBound
-	call CheckLineStatus
-	jnc NotComplete
-	mWrite "Line complete"
-	jmp Complete
-
-NotComplete:
-	mWrite "Line not complete"
-Complete:
 
 	; Pop original cursor position to return to former position
 	pop ax
@@ -613,6 +613,11 @@ Complete:
 UpdateScoreboard endp
 
 
+;-------------------------------------------------------------------------------
+; ResetGame
+;
+; Resets game data for repeat sessions.
+;-------------------------------------------------------------------------------
 ResetGame proc
 	; Reset scores
 	mov charsTyped, 0
@@ -625,11 +630,11 @@ ResetGame proc
 	mov typingPromptLeftBound, 0
 	mov charIdx, 0
 
-
 	; Reset timing
 	mov linePrintTicksElapsed, 0
 	mov linePrintCharIdx, 0
 	mov lineProgressSpeed, STARTING_PROGRESSION_SPEED
+	mov secondsPlayed, 0
 
 	mov ecx, LENGTHOF textColors - 1
 ResetColors:
@@ -752,6 +757,37 @@ LineIsIncorrect:
 LineIsCorrect:
 	ret
 CheckLineStatus endp
+
+
+;-------------------------------------------------------------------------------
+; TimeFormat
+;
+; Recieves: EAX = the amount of seconds
+;-------------------------------------------------------------------------------
+TimeFormat proc USES ebx
+	mov edx, 0	; Clear upper register
+	mov ebx, 60	; Divisor = 60 seconds
+	div ebx		; EDX = seconds, EAX = minutes
+
+	; Write minutes
+	cmp eax, 10
+	jae TwoDigitMin
+	mWrite " "
+TwoDigitMin:
+	call WriteDec
+
+	mWrite ":"
+
+	; Write seconds
+	mov eax, edx
+	cmp eax, 10
+	jae TwoDigitSec
+	mWrite "0"
+TwoDigitSec:
+	call WriteDec
+
+	ret
+TimeFormat endp
 
 
 end main
