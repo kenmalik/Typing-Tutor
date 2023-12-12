@@ -1,4 +1,4 @@
-Microsoft (R) Macro Assembler Version 14.38.33133.0	    12/11/23 22:00:55
+Microsoft (R) Macro Assembler Version 14.38.33133.0	    12/12/23 14:23:31
 TypingTutor.asm						     Page 1 - 1
 
 
@@ -38,7 +38,7 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
  00000001  000000C5 R			DWORD PLAY_GAME
  00000005 = 00000005		EntrySize = ($ - MenuTable)
  00000005  32				BYTE '2'
- 00000006  00000A6B R			DWORD LEADERBOARD
+ 00000006  00000E52 R			DWORD LEADERBOARD
  0000000A = 00000002		NumberOfEntries = ($ - MenuTable) / EntrySize
 
  00000000			.code
@@ -186,13 +186,13 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
  = 00000014			SCORE_LABEL_LENGTH = 20
 
 				; File reading utilities
- = 00001388			BUFFER_SIZE = 5000
+ = 00001388			PROMPT_BUFFER_SIZE = 5000
  =-00000001			FILE_UNREAD = -1
 
 				; Game logic timing
  = 00000032			TICK = 50	; in milliseconds
  = 00000014			SECOND_IN_TICKS = 20
- = 00000014			STARTING_PROGRESSION_SPEED = SECOND_IN_TICKS
+ = 00000028			STARTING_PROGRESSION_SPEED = SECOND_IN_TICKS * 2
 
 
  00000065			.data
@@ -207,7 +207,7 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 	   2D 2D 00
 
 					; For file handling
- 000000BD  00001388 [			typingPrompt BYTE BUFFER_SIZE DUP(?)
+ 000000BD  00001388 [			typingPrompt BYTE PROMPT_BUFFER_SIZE DUP(?)
 	    00
 	   ]
  00001445 00000000			typingPromptSize DWORD 0
@@ -232,7 +232,7 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 					; Game timing
  00003B79 00				linePrintTicksElapsed BYTE 0
  00003B7A 00000000			typingPromptRightBound DWORD 0
- 00003B7E 14				lineProgressSpeed BYTE STARTING_PROGRESSION_SPEED
+ 00003B7E 28				lineProgressSpeed BYTE STARTING_PROGRESSION_SPEED
  00003B7F 00000000			timerTicks DWORD 0
 
 					; Score counters
@@ -240,184 +240,188 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
  00003B87 00000000			backspacesPressed DWORD 0
  00003B8B 00000000			secondsPlayed DWORD 0
  00003B8F 00000000			linesCleared DWORD 0
+ 00003B93 00000000			wrongCharCount DWORD 0
 
 
  000000C5			.code
  000000C5			PLAY_GAME proc
- 000000C5  E8 0000044E			call ResetGame	; Reset game data every new game
+ 000000C5  E8 000004FF			call ResetGame	; Reset game data every new game
 
 					; Read file to memory
- 000000CA  BA 00001449 R		mov edx, OFFSET filename
- 000000CF  E8 000001DC			call OpenFile
- 000000D4  83 F8 FF			cmp eax, FILE_UNREAD
- 000000D7  0F 84 000001D2		je Quit
- 000000DD  E8 00000237			call closeInputFile
+ 000000CA  BB 00001388			mov ebx, PROMPT_BUFFER_SIZE
+ 000000CF  B9 000000BD R		mov ecx, OFFSET typingPrompt
+ 000000D4  BA 00001449 R		mov edx, OFFSET filename
+ 000000D9  E8 000001E2			call ReadFileToString
+ 000000DE  83 F8 FF			cmp eax, FILE_UNREAD
+ 000000E1  0F 84 000001D8		je Quit
+ 000000E7  A3 00001445 R		mov typingPromptSize, eax
 					
 					; Graphical elements
- 000000E2  E8 00000783			call DisplayPlayArea
- 000000E7  E8 000005C5			call GameStart
+ 000000EC  E8 0000082A			call DisplayPlayArea
+ 000000F1  E8 0000066C			call GameStart
 
 					; Set to standard color
- 000000EC  B8 000000F0			mov eax, black + (white * 16)
- 000000F1  E8 00000000 E		call SetTextColor
+ 000000F6  B8 000000F0			mov eax, black + (white * 16)
+ 000000FB  E8 00000000 E		call SetTextColor
 
 					; Initial cursor positioning
- 000000F6  B6 02			mov dh, PLAY_AREA_Y
- 000000F8  02 35 00003B78 R		add dh, distanceFromTop
- 000000FE  B2 0A			mov dl, PLAY_AREA_X
- 00000100  E8 000002FE			call UpdateCursorPos
+ 00000100  B6 02			mov dh, PLAY_AREA_Y
+ 00000102  02 35 00003B78 R		add dh, distanceFromTop
+ 00000108  B2 0A			mov dl, PLAY_AREA_X
+ 0000010A  E8 00000315			call UpdateCursorPos
 
 
- 00000105			MainGameLoop:
- 00000105  B8 00000032		    mov  eax, TICK    
- 0000010A  E8 00000000 E	    call Delay           ; Delay to ensure proper key read
+ 0000010F			MainGameLoop:
+ 0000010F  B8 00000032		    mov  eax, TICK    
+ 00000114  E8 00000000 E	    call Delay           ; Delay to ensure proper key read
 
- 0000010F  FF 05 00003B7F R		inc timerTicks
- 00000115  83 3D 00003B7F R		cmp timerTicks, SECOND_IN_TICKS
+ 00000119  FF 05 00003B7F R		inc timerTicks
+ 0000011F  83 3D 00003B7F R		cmp timerTicks, SECOND_IN_TICKS
 	   14
- 0000011C  75 10			jne TimerNotSet
- 0000011E  FF 05 00003B8B R		inc secondsPlayed
- 00000124  C7 05 00003B7F R		mov timerTicks, 0
+ 00000126  75 10			jne TimerNotSet
+ 00000128  FF 05 00003B8B R		inc secondsPlayed
+ 0000012E  C7 05 00003B7F R		mov timerTicks, 0
 	   00000000
 
- 0000012E			TimerNotSet:
- 0000012E  E8 00000361			call UpdateScoreboard
+ 00000138			TimerNotSet:
+ 00000138  E8 00000378			call UpdateScoreboard
 
 					; If time to print another line of text prompt, do so
- 00000133  FE 05 00003B79 R		inc linePrintTicksElapsed
- 00000139  A0 00003B7E R		mov al, lineProgressSpeed
- 0000013E  38 05 00003B79 R		cmp linePrintTicksElapsed, al
- 00000144  75 35			jne KeyRead						; Else, read key
+ 0000013D  FE 05 00003B79 R		inc linePrintTicksElapsed
+ 00000143  A0 00003B7E R		mov al, lineProgressSpeed
+ 00000148  38 05 00003B79 R		cmp linePrintTicksElapsed, al
+ 0000014E  75 35			jne KeyRead						; Else, read key
 
 					; If reached top of play area, game over
- 00000146  FE 0D 00003B78 R		dec distanceFromTop
- 0000014C  80 3D 00003B78 R		cmp distanceFromTop, -1			
+ 00000150  FE 0D 00003B78 R		dec distanceFromTop
+ 00000156  80 3D 00003B78 R		cmp distanceFromTop, -1			
 	   FF
- 00000153  75 0A			jne AddLine
- 00000155  E8 000005FF			call GameOver
- 0000015A  E9 00000146			jmp GameStats
+ 0000015D  75 0A			jne AddLine
+ 0000015F  E8 000006A6			call GameOver
+ 00000164  E9 0000014C			jmp GameStats
 
- 0000015F			AddLine:
- 0000015F  E8 000001C2			call NewPromptLine				; Print a new line of prompt
- 00000164  80 3D 00003B7E R		cmp lineProgressSpeed, 10		; Line progress speed = 10?
+ 00000169			AddLine:
+ 00000169  E8 000001D9			call NewPromptLine				; Print a new line of prompt
+ 0000016E  80 3D 00003B7E R		cmp lineProgressSpeed, 10		; Line progress speed = 10?
 	   0A
- 0000016B  76 07			jbe IsMaxSpeed					; No: don't make faster
- 0000016D  80 2D 00003B7E R		sub lineProgressSpeed, 1		; Yes: make faster
+ 00000175  76 07			jbe IsMaxSpeed					; No: don't make faster
+ 00000177  80 2D 00003B7E R		sub lineProgressSpeed, 1		; Yes: make faster
 	   01
 
- 00000174			IsMaxSpeed:
- 00000174  C6 05 00003B79 R		mov linePrintTicksElapsed, 0	; Reset tick counter for display
+ 0000017E			IsMaxSpeed:
+ 0000017E  C6 05 00003B79 R		mov linePrintTicksElapsed, 0	; Reset tick counter for display
 	   00
 
- 0000017B			KeyRead:
- 0000017B  E8 00000000 E	    call ReadKey			; look for keyboard input
- 00000180  74 83		    jz   MainGameLoop		; no key pressed yet
+ 00000185			KeyRead:
+ 00000185  E8 00000000 E	    call ReadKey			; look for keyboard input
+ 0000018A  74 83		    jz   MainGameLoop		; no key pressed yet
 
 					; If at bottom of play area, don't do anything
- 00000182  80 3D 00003B77 R		cmp cursorY, PLAY_AREA_Y + STARTING_DISTANCE
+ 0000018C  80 3D 00003B77 R		cmp cursorY, PLAY_AREA_Y + STARTING_DISTANCE
 	   1A
- 00000189  0F 84 FFFFFF76		je MainGameLoop
+ 00000193  0F 84 FFFFFF76		je MainGameLoop
 
 					; Check if escape pressed
- 0000018F  66| 83 FA 1B			cmp dx, VK_ESCAPE
- 00000193  75 01			jne CheckBackspace
- 00000195  C3				ret
+ 00000199  66| 83 FA 1B			cmp dx, VK_ESCAPE
+ 0000019D  75 01			jne CheckBackspace
+ 0000019F  C3				ret
 
- 00000196			CheckBackspace:
+ 000001A0			CheckBackspace:
 					; Check if backspace pressed
- 00000196  66| 83 FA 08			cmp dx, VK_BACK
- 0000019A  75 22			jne checkCharEqual				; If not backspace, process inputted character
+ 000001A0  66| 83 FA 08			cmp dx, VK_BACK
+ 000001A4  75 22			jne checkCharEqual				; If not backspace, process inputted character
 
 					; Backspace was pressed
- 0000019C  80 3D 00003B76 R		cmp cursorX, PLAY_AREA_X	; If on char 0, don't do anything
+ 000001A6  80 3D 00003B76 R		cmp cursorX, PLAY_AREA_X	; If on char 0, don't do anything
 	   0A
- 000001A3  0F 84 FFFFFF5C		je MainGameLoop
+ 000001AD  0F 84 FFFFFF5C		je MainGameLoop
 
- 000001A9  FF 05 00003B87 R		inc backspacesPressed
- 000001AF  E8 000002AD			call ReplacePreviousChar
- 000001B4  E8 00000426			call RevertLineStatus
- 000001B9  E9 FFFFFF47			jmp MainGameLoop
+ 000001B3  FF 05 00003B87 R		inc backspacesPressed
+ 000001B9  E8 000002C4			call ReplacePreviousChar
+ 000001BE  E8 000004CD			call RevertLineStatus
+ 000001C3  E9 FFFFFF47			jmp MainGameLoop
 
- 000001BE			checkCharEqual:
- 000001BE  FF 05 00003B83 R		inc charsTyped
+ 000001C8			checkCharEqual:
+ 000001C8  FF 05 00003B83 R		inc charsTyped
 
 					; Compare input with text
- 000001C4  8B 3D 0000145A R		mov edi, charIdx
- 000001CA  3A 87 000000BD R		cmp    al, typingPrompt[edi]
- 000001D0  75 11			jne    CharNotEqual
+ 000001CE  8B 3D 0000145A R		mov edi, charIdx
+ 000001D4  3A 87 000000BD R		cmp    al, typingPrompt[edi]
+ 000001DA  75 11			jne    CharNotEqual
 
 					; If character is equal
- 000001D2  B8 0000002F			mov eax, white + (green * 16)
- 000001D7  E8 00000207			call WriteToColorArr
- 000001DC  E8 000003CB			call CorrectInput
- 000001E1  EB 0F			jmp LineEndCheck
+ 000001DC  B8 0000002F			mov eax, white + (green * 16)
+ 000001E1  E8 0000021E			call WriteToColorArr
+ 000001E6  E8 00000472			call CorrectInput
+ 000001EB  EB 15			jmp LineEndCheck
 
- 000001E3			CharNotEqual:
- 000001E3  B8 0000004F			mov eax, white + (red * 16)
- 000001E8  E8 000001F6			call WriteToColorArr
- 000001ED  E8 000003D7			call WrongInput
+ 000001ED			CharNotEqual:
+ 000001ED  B8 0000004F			mov eax, white + (red * 16)
+ 000001F2  E8 0000020D			call WriteToColorArr
+ 000001F7  E8 0000047E			call WrongInput
+ 000001FC  FF 05 00003B93 R		inc wrongCharCount
 
- 000001F2			LineEndCheck:
- 000001F2  FF 05 0000145A R		inc    charIdx
- 000001F8  80 3D 00003B76 R		cmp cursorX, LINE_LENGTH + PLAY_AREA_X
+ 00000202			LineEndCheck:
+ 00000202  FF 05 0000145A R		inc    charIdx
+ 00000208  80 3D 00003B76 R		cmp cursorX, LINE_LENGTH + PLAY_AREA_X
 	   4A
- 000001FF  75 51			jne finishCheck
+ 0000020F  75 51			jne finishCheck
 
- 00000201  E8 0000040F			call CheckLineStatus
- 00000206  72 15			jc ClearLine
- 00000208  E8 00000254			call ReplacePreviousChar
- 0000020D  E8 000003CD			call RevertLineStatus
- 00000212  FF 0D 00003B83 R		dec charsTyped
- 00000218  E9 FFFFFEE8			jmp MainGameLoop
+ 00000211  E8 000004B0			call CheckLineStatus
+ 00000216  72 15			jc ClearLine
+ 00000218  E8 00000265			call ReplacePreviousChar
+ 0000021D  E8 0000046E			call RevertLineStatus
+ 00000222  FF 0D 00003B83 R		dec charsTyped
+ 00000228  E9 FFFFFEE2			jmp MainGameLoop
 
- 0000021D			ClearLine:
+ 0000022D			ClearLine:
 					; Clear completed lines
- 0000021D  8B 1D 00001456 R		mov ebx, typingPromptLeftBound
- 00000223  E8 000003CD			call ClearLineStatus
- 00000228  8A 35 00003B77 R		mov dh, cursorY
- 0000022E  B2 0A			mov dl, PLAY_AREA_X
- 00000230  E8 000001CE			call UpdateCursorPos					; Move cursor position for display clearing
- 00000235  E8 000001FF			call ClearDisplayLine
- 0000023A  E8 000001E4			call NewLine
- 0000023F  83 05 00001456 R		add typingPromptLeftBound, LINE_LENGTH	; Move left bound for typing prompt forward
+ 0000022D  8B 1D 00001456 R		mov ebx, typingPromptLeftBound
+ 00000233  E8 0000046E			call ClearLineStatus
+ 00000238  8A 35 00003B77 R		mov dh, cursorY
+ 0000023E  B2 0A			mov dl, PLAY_AREA_X
+ 00000240  E8 000001DF			call UpdateCursorPos					; Move cursor position for display clearing
+ 00000245  E8 00000210			call ClearDisplayLine
+ 0000024A  E8 000001F5			call NewLine
+ 0000024F  83 05 00001456 R		add typingPromptLeftBound, LINE_LENGTH	; Move left bound for typing prompt forward
 	   40
- 00000246  FE 05 00003B78 R		inc distanceFromTop						; Inc distance from top to account for cleared line
- 0000024C  FF 05 00003B8F R		inc linesCleared
+ 00000256  FE 05 00003B78 R		inc distanceFromTop						; Inc distance from top to account for cleared line
+ 0000025C  FF 05 00003B8F R		inc linesCleared
 
- 00000252			finishCheck:
+ 00000262			finishCheck:
 					; If not finished yet
- 00000252  80 BF 000000BE R		cmp    typingPrompt[edi + 1], 0
+ 00000262  80 BF 000000BE R		cmp    typingPrompt[edi + 1], 0
 	   00
- 00000259  0F 85 FFFFFEA6		jne    MainGameLoop
+ 00000269  0F 85 FFFFFEA0		jne    MainGameLoop
 
- 0000025F  8B 1D 00001456 R		mov ebx, typingPromptLeftBound
- 00000265  E8 000003AB			call CheckLineStatus
- 0000026A  72 15			jc LevelComplete
- 0000026C  E8 000001F0			call ReplacePreviousChar
- 00000271  E8 00000369			call RevertLineStatus
- 00000276  FF 0D 00003B83 R		dec charsTyped
- 0000027C  E9 FFFFFE84			jmp MainGameLoop
+ 0000026F  8B 1D 00001456 R		mov ebx, typingPromptLeftBound	; Is everything on the last line correct?
+ 00000275  E8 0000044C			call CheckLineStatus
+ 0000027A  72 0F			jc LevelComplete				; Yes: complete level
+ 0000027C  E8 00000201			call ReplacePreviousChar		; No: Revert last typed character
+ 00000281  E8 0000040A			call RevertLineStatus
+ 00000286  E9 FFFFFE84			jmp MainGameLoop
 
 
- 00000281			LevelComplete:
- 00000281  C6 05 00003B76 R		mov cursorX, PLAY_AREA_X
+ 0000028B			LevelComplete:
+ 0000028B  C6 05 00003B76 R		mov cursorX, PLAY_AREA_X
 	   0A
 					mGotoxy cursorX, cursorY
- 00000288  52		     1		push edx
- 00000289  8A 35 00003B77 R  1		mov  dh,cursorY
- 0000028F  8A 15 00003B76 R  1		mov  dl,cursorX
- 00000295  E8 00000000 E     1		call Gotoxy
- 0000029A  5A		     1		pop  edx
- 0000029B  E8 00000199			call ClearDisplayLine
- 000002A0  E8 0000056F			call LevelCleared
+ 00000292  52		     1		push edx
+ 00000293  8A 35 00003B77 R  1		mov  dh,cursorY
+ 00000299  8A 15 00003B76 R  1		mov  dl,cursorX
+ 0000029F  E8 00000000 E     1		call Gotoxy
+ 000002A4  5A		     1		pop  edx
+ 000002A5  E8 000001B0			call ClearDisplayLine
+ 000002AA  FF 05 00003B8F R		inc linesCleared
+ 000002B0  E8 00000610			call LevelCleared
 
- 000002A5			GameStats:
- 000002A5  E8 00000000 E		call Clrscr
- 000002AA  E8 00000693			call DisplayScores
+ 000002B5			GameStats:
+ 000002B5  E8 00000000 E		call Clrscr
+ 000002BA  E8 00000762			call DisplayScores
 
- 000002AF			Quit:
- 000002AF  C3				ret
- 000002B0			PLAY_GAME endp
+ 000002BF			Quit:
+ 000002BF  C3				ret
+ 000002C0			PLAY_GAME endp
 
 
 				;-------------------------------------------------------------------------------
@@ -426,61 +430,72 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 
 
 				;-------------------------------------------------------------------------------
-				; OpenFile
+				; ReadFileToString
 				;
 				; Opens the file whose name is stored in filename. Verifies file is opened and
 				; that contents are within designated buffer size.
 				; Receives: EDX = Offset of the filename to be opened.
+				;			ECX = Offset of the string to read to.
+				;			EBX = Size of buffer
 				; Returns:  EAX = Bytes read (set to FILE_UNREAD if error occurs).
 				;-------------------------------------------------------------------------------
- 000002B0			OpenFile proc
- 000002B0  E8 00000000 E		call OpenInputFile
- 000002B5  A3 00001452 R		mov fileHandle, eax
+ 00003B97			.data
+ 00003B97 00000000			fHandle HANDLE ?
+ 00003B9B 00000000			bytesRead DWORD 0
+ 00003B9F 00000000			stringOffset DWORD 0
+ 00003BA3 00000000			bufsize DWORD 0
+ 000002C0			.code
+ 000002C0			ReadFileToString proc
+ 000002C0  89 0D 00003B9F R		mov stringOffset, ecx
+ 000002C6  89 1D 00003BA3 R		mov bufSize, ebx
 
- 000002BA  83 F8 FF			cmp eax, INVALID_HANDLE_VALUE
- 000002BD  75 13			jne FileOk
+ 000002CC  E8 00000000 E		call OpenInputFile
+ 000002D1  A3 00003B97 R		mov fHandle, eax
+
+ 000002D6  83 F8 FF			cmp eax, INVALID_HANDLE_VALUE
+ 000002D9  75 13			jne FileOk
 					mWrite <"Cannot open file", 0dh, 0ah>
- 00003B93		     1		.data		
- 00003B93 43 61 6E 6E 6F     1		??0004 BYTE "Cannot open file", 0dh, 0ah,0	
+ 00003BA7		     1		.data		
+ 00003BA7 43 61 6E 6E 6F     1		??0004 BYTE "Cannot open file", 0dh, 0ah,0	
 	   74 20 6F 70 65
 	   6E 20 66 69 6C
 	   65 0D 0A 00
- 000002BF		     1		.code
- 000002BF  52		     1		push	edx
- 000002C0  BA 00003B93 R     1		mov	edx,OFFSET ??0004
- 000002C5  E8 00000000 E     1		call	WriteString
- 000002CA  5A		     1		pop	edx
- 000002CB  B8 FFFFFFFF			mov eax, FILE_UNREAD
- 000002D0  EB 46			jmp Quit
+ 000002DB		     1		.code
+ 000002DB  52		     1		push	edx
+ 000002DC  BA 00003BA7 R     1		mov	edx,OFFSET ??0004
+ 000002E1  E8 00000000 E     1		call	WriteString
+ 000002E6  5A		     1		pop	edx
+ 000002E7  B8 FFFFFFFF			mov eax, FILE_UNREAD
+ 000002EC  EB 58			jmp Quit
 
- 000002D2			FileOk:
- 000002D2  BA 000000BD R		mov edx, OFFSET typingPrompt
- 000002D7  B9 00001388			mov ecx, BUFFER_SIZE
- 000002DC  E8 00000000 E		call ReadFromFile
- 000002E1  A3 00001445 R		mov typingPromptSize, eax
- 000002E6  73 18			jnc CheckBufferSize
+ 000002EE			FileOk:
+ 000002EE  8B 15 00003B9F R		mov edx, stringOffset
+ 000002F4  8B 0D 00003BA3 R		mov ecx, bufSize
+ 000002FA  E8 00000000 E		call ReadFromFile
+ 000002FF  A3 00003B9B R		mov bytesRead, eax
+ 00000304  73 18			jnc CheckBufferSize
 					mWrite "Error reading file. "
- 00003BA6		     1		.data		
- 00003BA6 45 72 72 6F 72     1		??0005 BYTE "Error reading file. ",0	
+ 00003BBA		     1		.data		
+ 00003BBA 45 72 72 6F 72     1		??0005 BYTE "Error reading file. ",0	
 	   20 72 65 61 64
 	   69 6E 67 20 66
 	   69 6C 65 2E 20
 	   00
- 000002E8		     1		.code
- 000002E8  52		     1		push	edx
- 000002E9  BA 00003BA6 R     1		mov	edx,OFFSET ??0005
- 000002EE  E8 00000000 E     1		call	WriteString
- 000002F3  5A		     1		pop	edx
- 000002F4  E8 00000000 E		call WriteWindowsMsg
- 000002F9  B8 FFFFFFFF			mov eax, FILE_UNREAD
- 000002FE  EB 18			jmp Quit
+ 00000306		     1		.code
+ 00000306  52		     1		push	edx
+ 00000307  BA 00003BBA R     1		mov	edx,OFFSET ??0005
+ 0000030C  E8 00000000 E     1		call	WriteString
+ 00000311  5A		     1		pop	edx
+ 00000312  E8 00000000 E		call WriteWindowsMsg
+ 00000317  B8 FFFFFFFF			mov eax, FILE_UNREAD
+ 0000031C  EB 19			jmp CloseInFile
 					
- 00000300			CheckBufferSize:
- 00000300  3D 00001388			cmp eax, BUFFER_SIZE
- 00000305  72 11			jb Quit
+ 0000031E			CheckBufferSize:
+ 0000031E  3B 05 00003BA3 R		cmp eax, bufSize
+ 00000324  72 11			jb CloseInFile
 					mWrite <"Error: Buffer too small for the file", 0dh, 0ah>
- 00003BBB		     1		.data		
- 00003BBB 45 72 72 6F 72     1		??0006 BYTE "Error: Buffer too small for the file", 0dh, 0ah,0	
+ 00003BCF		     1		.data		
+ 00003BCF 45 72 72 6F 72     1		??0006 BYTE "Error: Buffer too small for the file", 0dh, 0ah,0	
 	   3A 20 42 75 66
 	   66 65 72 20 74
 	   6F 6F 20 73 6D
@@ -488,31 +503,21 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 	   6F 72 20 74 68
 	   65 20 66 69 6C
 	   65 0D 0A 00
- 00000307		     1		.code
- 00000307  52		     1		push	edx
- 00000308  BA 00003BBB R     1		mov	edx,OFFSET ??0006
- 0000030D  E8 00000000 E     1		call	WriteString
- 00000312  5A		     1		pop	edx
- 00000313  B8 FFFFFFFF			mov eax, FILE_UNREAD
+ 00000326		     1		.code
+ 00000326  52		     1		push	edx
+ 00000327  BA 00003BCF R     1		mov	edx,OFFSET ??0006
+ 0000032C  E8 00000000 E     1		call	WriteString
+ 00000331  5A		     1		pop	edx
+ 00000332  B8 FFFFFFFF			mov eax, FILE_UNREAD
 
- 00000318			Quit:
- 00000318  C3				ret
- 00000319			OpenFile endp
+ 00000337			CloseInFile:
+ 00000337  A1 00003B97 R		mov eax, fHandle
+ 0000033C  E8 00000000 E		call CloseFile
+ 00000341  A1 00003B9B R		mov eax, bytesRead
 
-
-				;-------------------------------------------------------------------------------
-				; CloseInputFile
-				;
-				; Closes the file currently in fileHandle.
-				;-------------------------------------------------------------------------------
- 00000319			CloseInputFile proc USES eax
- 00000319  50		   *	    push   eax
- 0000031A  A1 00001452 R		mov eax, fileHandle
- 0000031F  E8 00000000 E		call CloseFile
-					ret
- 00000324  58		   *	    pop    eax
- 00000325  C3		   *	    ret    00000h
- 00000326			CloseInputFile endp
+ 00000346			Quit:
+ 00000346  C3				ret
+ 00000347			ReadFileToString endp
 
 
 				;-------------------------------------------------------------------------------
@@ -520,56 +525,56 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Writes a new line in the typing prompt.
 				;-------------------------------------------------------------------------------
- 00000326			NewPromptLine proc USES eax ebx ecx edx
+ 00000347			NewPromptLine proc USES eax ebx ecx edx
 					; Push cursor position to stack
- 00000326  50		   *	    push   eax
- 00000327  53		   *	    push   ebx
- 00000328  51		   *	    push   ecx
- 00000329  52		   *	    push   edx
- 0000032A  66| 0F B6 05			movzx ax, cursorX
+ 00000347  50		   *	    push   eax
+ 00000348  53		   *	    push   ebx
+ 00000349  51		   *	    push   ecx
+ 0000034A  52		   *	    push   edx
+ 0000034B  66| 0F B6 05			movzx ax, cursorX
 	   00003B76 R
- 00000332  66| 50			push ax
- 00000334  66| 0F B6 05			movzx ax, cursorY
+ 00000353  66| 50			push ax
+ 00000355  66| 0F B6 05			movzx ax, cursorY
 	   00003B77 R
- 0000033C  66| 50			push ax
+ 0000035D  66| 50			push ax
 
 					; Set cursor position to rewrite block of text
- 0000033E  8A 35 00003B78 R		mov dh, distanceFromTop
- 00000344  80 C6 02			add dh, PLAY_AREA_Y
- 00000347  B2 0A			mov dl, PLAY_AREA_X
- 00000349  E8 000000B5			call UpdateCursorPos
+ 0000035F  8A 35 00003B78 R		mov dh, distanceFromTop
+ 00000365  80 C6 02			add dh, PLAY_AREA_Y
+ 00000368  B2 0A			mov dl, PLAY_AREA_X
+ 0000036A  E8 000000B5			call UpdateCursorPos
 
 					; Write text block
- 0000034E  83 05 00003B7A R		add typingPromptRightBound, LINE_LENGTH
+ 0000036F  83 05 00003B7A R		add typingPromptRightBound, LINE_LENGTH
 	   40
- 00000355  BA 000000BD R		mov edx, OFFSET typingPrompt
- 0000035A  8B 0D 00003B7A R		mov ecx, typingPromptRightBound
- 00000360  8B 1D 00001456 R		mov ebx, typingPromptLeftBound
- 00000366  E8 00000027			call ReprintPrompt
+ 00000376  BA 000000BD R		mov edx, OFFSET typingPrompt
+ 0000037B  8B 0D 00003B7A R		mov ecx, typingPromptRightBound
+ 00000381  8B 1D 00001456 R		mov ebx, typingPromptLeftBound
+ 00000387  E8 00000027			call ReprintPrompt
 					
- 0000036B  E8 000000B3			call NewLine	; Move cursor to line below written prompt
+ 0000038C  E8 000000B3			call NewLine	; Move cursor to line below written prompt
 
 					; If cursor is not at bottom of play area, clear the display line below prompt
- 00000370  80 3D 00003B77 R		cmp cursorY, PLAY_AREA_Y + STARTING_DISTANCE
+ 00000391  80 3D 00003B77 R		cmp cursorY, PLAY_AREA_Y + STARTING_DISTANCE
 	   1A
- 00000377  74 05			je ReturnToOriginalPos
- 00000379  E8 000000BB			call ClearDisplayLine
+ 00000398  74 05			je ReturnToOriginalPos
+ 0000039A  E8 000000BB			call ClearDisplayLine
 					
- 0000037E			ReturnToOriginalPos:
+ 0000039F			ReturnToOriginalPos:
 					; Pop original cursor position to return to former position
- 0000037E  66| 58			pop ax
- 00000380  FE C8			dec al			; Cursor y has to decrement to account for prompt having moved
- 00000382  8A F0			mov dh, al
- 00000384  66| 58			pop ax
- 00000386  8A D0			mov dl, al
- 00000388  E8 00000076			call UpdateCursorPos
+ 0000039F  66| 58			pop ax
+ 000003A1  FE C8			dec al			; Cursor y has to decrement to account for prompt having moved
+ 000003A3  8A F0			mov dh, al
+ 000003A5  66| 58			pop ax
+ 000003A7  8A D0			mov dl, al
+ 000003A9  E8 00000076			call UpdateCursorPos
 					ret
- 0000038D  5A		   *	    pop    edx
- 0000038E  59		   *	    pop    ecx
- 0000038F  5B		   *	    pop    ebx
- 00000390  58		   *	    pop    eax
- 00000391  C3		   *	    ret    00000h
- 00000392			NewPromptLine endp
+ 000003AE  5A		   *	    pop    edx
+ 000003AF  59		   *	    pop    ecx
+ 000003B0  5B		   *	    pop    ebx
+ 000003B1  58		   *	    pop    eax
+ 000003B2  C3		   *	    ret    00000h
+ 000003B3			NewPromptLine endp
 
 
 				;-------------------------------------------------------------------------------
@@ -580,40 +585,40 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;			EBX = The index of typing prompt to start printing from
 				;			ECX = The index of typing prompt to stop printing at
 				;-------------------------------------------------------------------------------
- 00000392			ReprintPrompt proc USES edi
- 00000392  57		   *	    push   edi
- 00000393  BF 00000000		 	mov edi, 0				; Counter for if line length was reached
- 00000398  8A 04 1A			mov al, [edx + ebx]
+ 000003B3			ReprintPrompt proc USES edi
+ 000003B3  57		   *	    push   edi
+ 000003B4  BF 00000000		 	mov edi, 0				; Counter for if line length was reached
+ 000003B9  8A 04 1A			mov al, [edx + ebx]
 
- 0000039B			printLoop:
+ 000003BC			printLoop:
 					; If reached line length, start new line
- 0000039B  83 FF 40			cmp edi, LINE_LENGTH
- 0000039E  75 0A			jne writeChars
- 000003A0  E8 0000007E			call NewLine
- 000003A5  BF 00000000			mov edi, 0
+ 000003BC  83 FF 40			cmp edi, LINE_LENGTH
+ 000003BF  75 0A			jne writeChars
+ 000003C1  E8 0000007E			call NewLine
+ 000003C6  BF 00000000			mov edi, 0
 
- 000003AA			writeChars:
- 000003AA  E8 00000016			call WriteFromColorArr
+ 000003CB			writeChars:
+ 000003CB  E8 00000016			call WriteFromColorArr
 
 					; Break if end of string
- 000003AF  43				inc ebx
- 000003B0  47				inc edi
- 000003B1  8A 04 1A			mov al, [edx + ebx]
- 000003B4  3C 00			cmp al, 0
- 000003B6  75 07			jne continuePrintLoop
+ 000003D0  43				inc ebx
+ 000003D1  47				inc edi
+ 000003D2  8A 04 1A			mov al, [edx + ebx]
+ 000003D5  3C 00			cmp al, 0
+ 000003D7  75 07			jne continuePrintLoop
 
- 000003B8  E8 0000007C			call ClearDisplayLine	; Clear the rest of the display line
- 000003BD  EB 04			jmp Quit
+ 000003D9  E8 0000007C			call ClearDisplayLine	; Clear the rest of the display line
+ 000003DE  EB 04			jmp Quit
 
- 000003BF			continuePrintLoop:
- 000003BF  3B D9			cmp ebx, ecx
- 000003C1  75 D8			jne printLoop
+ 000003E0			continuePrintLoop:
+ 000003E0  3B D9			cmp ebx, ecx
+ 000003E2  75 D8			jne printLoop
 					
- 000003C3			Quit:
+ 000003E4			Quit:
 					ret
- 000003C3  5F		   *	    pop    edi
- 000003C4  C3		   *	    ret    00000h
- 000003C5			ReprintPrompt endp
+ 000003E4  5F		   *	    pop    edi
+ 000003E5  C3		   *	    ret    00000h
+ 000003E6			ReprintPrompt endp
 
 
 				;-------------------------------------------------------------------------------
@@ -622,21 +627,21 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				; Writes a colored character to display using colors from text colors array.
 				; Receives: EBX = Index of character in array to write
 				;-------------------------------------------------------------------------------
- 000003C5			WriteFromColorArr proc USES ecx
- 000003C5  51		   *	    push   ecx
- 000003C6  FE 05 00003B76 R		inc cursorX
- 000003CC  B9 0000145E R		mov ecx, OFFSET textColors	; Get a reference to text colors array
+ 000003E6			WriteFromColorArr proc USES ecx
+ 000003E6  51		   *	    push   ecx
+ 000003E7  FE 05 00003B76 R		inc cursorX
+ 000003ED  B9 0000145E R		mov ecx, OFFSET textColors	; Get a reference to text colors array
 
- 000003D1  8B 04 59			mov eax, [ecx + (ebx * TYPE textColors)]	; Select color from array
- 000003D4  E8 00000000 E		call SetTextColor
+ 000003F2  8B 04 59			mov eax, [ecx + (ebx * TYPE textColors)]	; Select color from array
+ 000003F5  E8 00000000 E		call SetTextColor
 
- 000003D9  8A 04 1A			mov al, [edx + ebx]			; Write character in selected color
- 000003DC  E8 00000000 E		call WriteChar
+ 000003FA  8A 04 1A			mov al, [edx + ebx]			; Write character in selected color
+ 000003FD  E8 00000000 E		call WriteChar
 					
 					ret
- 000003E1  59		   *	    pop    ecx
- 000003E2  C3		   *	    ret    00000h
- 000003E3			WriteFromColorArr endp
+ 00000402  59		   *	    pop    ecx
+ 00000403  C3		   *	    ret    00000h
+ 00000404			WriteFromColorArr endp
 
 
 				;-------------------------------------------------------------------------------
@@ -646,16 +651,16 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				; Receives: EAX = the color to write in and save to textColors array
 				;			EDI = the index of color array to write to.
 				;-------------------------------------------------------------------------------
- 000003E3			WriteToColorArr proc
- 000003E3  E8 00000000 E		call SetTextColor
- 000003E8  66| 89 04 7D			mov textColors[edi * TYPE textColors], ax	; Save color
+ 00000404			WriteToColorArr proc
+ 00000404  E8 00000000 E		call SetTextColor
+ 00000409  66| 89 04 7D			mov textColors[edi * TYPE textColors], ax	; Save color
 	   0000145E R
- 000003F0  0F B6 87			movzx eax, typingPrompt[edi]
+ 00000411  0F B6 87			movzx eax, typingPrompt[edi]
 	   000000BD R
- 000003F7  E8 00000000 E		call WriteChar
- 000003FC  FE 05 00003B76 R		inc cursorX
- 00000402  C3				ret
- 00000403			WriteToColorArr endp
+ 00000418  E8 00000000 E		call WriteChar
+ 0000041D  FE 05 00003B76 R		inc cursorX
+ 00000423  C3				ret
+ 00000424			WriteToColorArr endp
 
 
 				;-------------------------------------------------------------------------------
@@ -666,17 +671,17 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				; Receives: DL = the x position to set cursor to
 				;			DH = the y position to set cursor to
 				;-------------------------------------------------------------------------------
- 00000403			UpdateCursorPos proc
- 00000403  88 15 00003B76 R		mov cursorX, dl
- 00000409  88 35 00003B77 R		mov cursorY, dh
+ 00000424			UpdateCursorPos proc
+ 00000424  88 15 00003B76 R		mov cursorX, dl
+ 0000042A  88 35 00003B77 R		mov cursorY, dh
 					mGotoxy cursorX, cursorY
- 0000040F  52		     1		push edx
- 00000410  8A 35 00003B77 R  1		mov  dh,cursorY
- 00000416  8A 15 00003B76 R  1		mov  dl,cursorX
- 0000041C  E8 00000000 E     1		call Gotoxy
- 00000421  5A		     1		pop  edx
- 00000422  C3				ret
- 00000423			UpdateCursorPos endp
+ 00000430  52		     1		push edx
+ 00000431  8A 35 00003B77 R  1		mov  dh,cursorY
+ 00000437  8A 15 00003B76 R  1		mov  dl,cursorX
+ 0000043D  E8 00000000 E     1		call Gotoxy
+ 00000442  5A		     1		pop  edx
+ 00000443  C3				ret
+ 00000444			UpdateCursorPos endp
 
 
 				;-------------------------------------------------------------------------------
@@ -684,16 +689,16 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Moves cursor to the next line in play area.
 				;-------------------------------------------------------------------------------
- 00000423			NewLine proc USES edx
- 00000423  52		   *	    push   edx
- 00000424  FE 05 00003B77 R		inc cursorY
- 0000042A  8A 35 00003B77 R		mov dh, cursorY
- 00000430  B2 0A			mov dl, PLAY_AREA_X
- 00000432  E8 FFFFFFCC			call UpdateCursorPos
+ 00000444			NewLine proc USES edx
+ 00000444  52		   *	    push   edx
+ 00000445  FE 05 00003B77 R		inc cursorY
+ 0000044B  8A 35 00003B77 R		mov dh, cursorY
+ 00000451  B2 0A			mov dl, PLAY_AREA_X
+ 00000453  E8 FFFFFFCC			call UpdateCursorPos
 					ret
- 00000437  5A		   *	    pop    edx
- 00000438  C3		   *	    ret    00000h
- 00000439			NewLine endp
+ 00000458  5A		   *	    pop    edx
+ 00000459  C3		   *	    ret    00000h
+ 0000045A			NewLine endp
 
 
 				;-------------------------------------------------------------------------------
@@ -701,31 +706,32 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Clears a line of the play area starting from cursor's x coordinate.
 				;-------------------------------------------------------------------------------
- 00000439			ClearDisplayLine proc USES eax
- 00000439  50		   *	    push   eax
- 0000043A  B8 0000000F			mov eax, white+(black*16)
- 0000043F  E8 00000000 E		call SetTextColor
+ 0000045A			ClearDisplayLine proc USES eax
+ 0000045A  50		   *	    push   eax
+ 0000045B  B8 0000000F			mov eax, white+(black*16)
+ 00000460  E8 00000000 E		call SetTextColor
 
- 00000444			spaceWrite:
+ 00000465			spaceWrite:
 					mWriteSpace
- 00003BE2		     1	.data
- 00003BE2  00000001 [	     1	??0007 BYTE 1 DUP(' '),0
+
+ 00003BF6		     1	.data
+ 00003BF6  00000001 [	     1	??0007 BYTE 1 DUP(' '),0
 	    20
 	   ] 00
- 00000444		     1	.code
- 00000444  52		     1		push	edx
- 00000445  BA 00003BE2 R     1		mov	edx,OFFSET ??0007
- 0000044A  E8 00000000 E     1		call	WriteString
- 0000044F  5A		     1		pop	edx
- 00000450  FE 05 00003B76 R		inc cursorX
- 00000456  80 3D 00003B76 R		cmp cursorX, PLAY_AREA_X + LINE_LENGTH
+ 00000465		     1	.code
+ 00000465  52		     1		push	edx
+ 00000466  BA 00003BF6 R     1		mov	edx,OFFSET ??0007
+ 0000046B  E8 00000000 E     1		call	WriteString
+ 00000470  5A		     1		pop	edx
+ 00000471  FE 05 00003B76 R		inc cursorX
+ 00000477  80 3D 00003B76 R		cmp cursorX, PLAY_AREA_X + LINE_LENGTH
 	   4A
- 0000045D  75 E5			jne spaceWrite
+ 0000047E  75 E5			jne spaceWrite
 					
 					ret
- 0000045F  58		   *	    pop    eax
- 00000460  C3		   *	    ret    00000h
- 00000461			ClearDisplayLine endp
+ 00000480  58		   *	    pop    eax
+ 00000481  C3		   *	    ret    00000h
+ 00000482			ClearDisplayLine endp
 
 
 				;-------------------------------------------------------------------------------
@@ -734,21 +740,21 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				; Reverts color of previous character in play area and updates text color array
 				; accordingly.
 				;-------------------------------------------------------------------------------
- 00000461			ReplacePreviousChar proc
- 00000461  FE 0D 00003B76 R		dec cursorX
- 00000467  8A 35 00003B77 R		mov dh, cursorY
- 0000046D  8A 15 00003B76 R		mov dl, cursorX
- 00000473  E8 FFFFFF8B			call UpdateCursorPos           ; Move cursor to previous char
+ 00000482			ReplacePreviousChar proc
+ 00000482  FE 0D 00003B76 R		dec cursorX
+ 00000488  8A 35 00003B77 R		mov dh, cursorY
+ 0000048E  8A 15 00003B76 R		mov dl, cursorX
+ 00000494  E8 FFFFFF8B			call UpdateCursorPos           ; Move cursor to previous char
 
- 00000478  B8 000000F0			mov eax, black + (white * 16)  ; Reverting color of char (this moves cursor forward)
- 0000047D  FF 0D 0000145A R		dec charIdx         
- 00000483  8B 3D 0000145A R		mov edi, charIdx
- 00000489  E8 FFFFFF55			call WriteToColorArr
+ 00000499  B8 000000F0			mov eax, black + (white * 16)  ; Reverting color of char (this moves cursor forward)
+ 0000049E  FF 0D 0000145A R		dec charIdx         
+ 000004A4  8B 3D 0000145A R		mov edi, charIdx
+ 000004AA  E8 FFFFFF55			call WriteToColorArr
 
- 0000048E  E8 FFFFFF70			call UpdateCursorPos           ; Move cursor back to previous char's space
+ 000004AF  E8 FFFFFF70			call UpdateCursorPos           ; Move cursor back to previous char's space
 
- 00000493  C3				ret
- 00000494			ReplacePreviousChar endp
+ 000004B4  C3				ret
+ 000004B5			ReplacePreviousChar endp
 
 
 				;-------------------------------------------------------------------------------
@@ -756,68 +762,152 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Writes score information to info column.
 				;-------------------------------------------------------------------------------
- 00000494			UpdateScoreboard proc USES eax edx
+ 000004B5			UpdateScoreboard proc USES eax edx
 					; Push cursor position to stack
- 00000494  50		   *	    push   eax
- 00000495  52		   *	    push   edx
- 00000496  66| 0F B6 05			movzx ax, cursorX
+ 000004B5  50		   *	    push   eax
+ 000004B6  52		   *	    push   edx
+ 000004B7  66| 0F B6 05			movzx ax, cursorX
 	   00003B76 R
- 0000049E  66| 50			push ax
- 000004A0  66| 0F B6 05			movzx ax, cursorY
+ 000004BF  66| 50			push ax
+ 000004C1  66| 0F B6 05			movzx ax, cursorY
 	   00003B77 R
- 000004A8  66| 50			push ax
+ 000004C9  66| 50			push ax
 
- 000004AA  B8 0000000E			mov eax, yellow+(black*16)
- 000004AF  E8 00000000 E		call SetTextColor
+ 000004CB  B8 0000000E			mov eax, yellow+(black*16)
+ 000004D0  E8 00000000 E		call SetTextColor
 
 					mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y
- 000004B4  52		     1		push edx
- 000004B5  B6 06	     1		mov  dh,SCOREBOARD_Y
- 000004B7  B2 64	     1		mov  dl,INFO_COLUMN_X + SCORE_LABEL_LENGTH
- 000004B9  E8 00000000 E     1		call Gotoxy
- 000004BE  5A		     1		pop  edx
- 000004BF  A1 00003B8B R		mov eax, secondsPlayed
- 000004C4  E8 000001B0			call TimeFormat
+ 000004D5  52		     1		push edx
+ 000004D6  B6 06	     1		mov  dh,SCOREBOARD_Y
+ 000004D8  B2 64	     1		mov  dl,INFO_COLUMN_X + SCORE_LABEL_LENGTH
+ 000004DA  E8 00000000 E     1		call Gotoxy
+ 000004DF  5A		     1		pop  edx
+ 000004E0  A1 00003B8B R		mov eax, secondsPlayed
+ 000004E5  E8 00000240			call TimeFormat
 
 					mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y + LINE_SPACING
- 000004C9  52		     1		push edx
- 000004CA  B6 08	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING
- 000004CC  B2 64	     1		mov  dl,INFO_COLUMN_X + SCORE_LABEL_LENGTH
- 000004CE  E8 00000000 E     1		call Gotoxy
- 000004D3  5A		     1		pop  edx
- 000004D4  A1 00003B8F R		mov eax, linesCleared
- 000004D9  E8 00000000 E		call WriteDec
+ 000004EA  52		     1		push edx
+ 000004EB  B6 08	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING
+ 000004ED  B2 64	     1		mov  dl,INFO_COLUMN_X + SCORE_LABEL_LENGTH
+ 000004EF  E8 00000000 E     1		call Gotoxy
+ 000004F4  5A		     1		pop  edx
+ 000004F5  A1 00003B8F R		mov eax, linesCleared
+ 000004FA  E8 00000000 E		call WriteDec
 
 					mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y + LINE_SPACING * 2
- 000004DE  52		     1		push edx
- 000004DF  B6 0A	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING * 2
- 000004E1  B2 64	     1		mov  dl,INFO_COLUMN_X + SCORE_LABEL_LENGTH
- 000004E3  E8 00000000 E     1		call Gotoxy
- 000004E8  5A		     1		pop  edx
- 000004E9  A1 00003B83 R		mov eax, charsTyped
- 000004EE  E8 00000000 E		call WriteDec
+ 000004FF  52		     1		push edx
+ 00000500  B6 0A	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING * 2
+ 00000502  B2 64	     1		mov  dl,INFO_COLUMN_X + SCORE_LABEL_LENGTH
+ 00000504  E8 00000000 E     1		call Gotoxy
+ 00000509  5A		     1		pop  edx
+ 0000050A  A1 00003B83 R		mov eax, charsTyped
+ 0000050F  E8 00000000 E		call WriteDec
 
 					mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y + LINE_SPACING * 3
- 000004F3  52		     1		push edx
- 000004F4  B6 0C	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING * 3
- 000004F6  B2 64	     1		mov  dl,INFO_COLUMN_X + SCORE_LABEL_LENGTH
- 000004F8  E8 00000000 E     1		call Gotoxy
- 000004FD  5A		     1		pop  edx
- 000004FE  A1 00003B87 R		mov eax, backspacesPressed
- 00000503  E8 00000000 E		call WriteDec
+ 00000514  52		     1		push edx
+ 00000515  B6 0C	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING * 3
+ 00000517  B2 64	     1		mov  dl,INFO_COLUMN_X + SCORE_LABEL_LENGTH
+ 00000519  E8 00000000 E     1		call Gotoxy
+ 0000051E  5A		     1		pop  edx
+ 0000051F  A1 00003B87 R		mov eax, backspacesPressed
+ 00000524  E8 00000000 E		call WriteDec
+
+					mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y + LINE_SPACING * 4
+ 00000529  52		     1		push edx
+ 0000052A  B6 0E	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING * 4
+ 0000052C  B2 64	     1		mov  dl,INFO_COLUMN_X + SCORE_LABEL_LENGTH
+ 0000052E  E8 00000000 E     1		call Gotoxy
+ 00000533  5A		     1		pop  edx
+ 00000534  8B 0D 00003B83 R		mov ecx, charsTyped
+ 0000053A  A1 00003B8B R		mov eax, secondsPlayed
+ 0000053F  E8 00000035			call GetWPM
+ 00000544  E8 00000000 E		call WriteDec
+
+					mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y + LINE_SPACING * 5
+ 00000549  52		     1		push edx
+ 0000054A  B6 10	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING * 5
+ 0000054C  B2 64	     1		mov  dl,INFO_COLUMN_X + SCORE_LABEL_LENGTH
+ 0000054E  E8 00000000 E     1		call Gotoxy
+ 00000553  5A		     1		pop  edx
+ 00000554  A1 00003B83 R		mov eax, charsTyped
+ 00000559  8B 0D 00003B93 R		mov ecx, wrongCharCount
+ 0000055F  E8 00000043			call GetErrorsPerHundred
+ 00000564  E8 00000000 E		call WriteDec
 
 					; Pop original cursor position to return to former position
- 00000508  66| 58			pop ax
- 0000050A  8A F0			mov dh, al
- 0000050C  66| 58			pop ax
- 0000050E  8A D0			mov dl, al
- 00000510  E8 FFFFFEEE			call UpdateCursorPos
+ 00000569  66| 58			pop ax
+ 0000056B  8A F0			mov dh, al
+ 0000056D  66| 58			pop ax
+ 0000056F  8A D0			mov dl, al
+ 00000571  E8 FFFFFEAE			call UpdateCursorPos
 
 					ret
- 00000515  5A		   *	    pop    edx
- 00000516  58		   *	    pop    eax
- 00000517  C3		   *	    ret    00000h
- 00000518			UpdateScoreboard endp
+ 00000576  5A		   *	    pop    edx
+ 00000577  58		   *	    pop    eax
+ 00000578  C3		   *	    ret    00000h
+ 00000579			UpdateScoreboard endp
+
+
+				;-------------------------------------------------------------------------------
+				; GetWPM
+				;
+				; Calculate words per minute.
+				; Receives: ECX = Characters
+				;			EAX = Seconds
+				; Returns:	EAX = Words per minute
+				;-------------------------------------------------------------------------------
+ 00000579			GetWPM proc
+ 00000579  BA 00000000			mov edx, 0	; Clear upper register
+ 0000057E  BB 0000003C			mov ebx, 60	; Divisor = 60 seconds
+ 00000583  F7 F3			div ebx		; EDX = seconds, EAX = minutes
+
+ 00000585  83 F8 00			cmp eax, 0			; Minutes is 0?
+ 00000588  75 05			jne MinutesNotZero
+ 0000058A  B8 00000001			mov eax, 1			; Yes: Round up to 1
+
+ 0000058F			MinutesNotZero:
+ 0000058F  50				push eax	; Save minutes
+
+					; Calculating words (assuming average word is 5 chars)
+ 00000590  BA 00000000			mov edx, 0		; Clear upper register
+ 00000595  8B C1			mov eax, ecx	; Dividend = Characters
+ 00000597  B9 00000005			mov ecx, 5		; Divisor = 5 (avg word length)
+ 0000059C  F7 F1			div ecx			; EAX = Words
+
+ 0000059E  BA 00000000			mov edx, 0	; Clear upper register
+ 000005A3  5B				pop ebx		; Divisor = minutes
+ 000005A4  F7 F3			div ebx		; Words / Seconds, EAX = WPM
+					
+ 000005A6  C3				ret
+ 000005A7			GetWPM endp
+
+
+				;-------------------------------------------------------------------------------
+				; GetErrorsPerHundred
+				;
+				; Calculate errors per hundred characters.
+				; Receives: ECX = Error characters
+				;			EAX = Characters typed
+				; Returns:	EAX = Errors per hundred characters
+				;-------------------------------------------------------------------------------
+ 000005A7			GetErrorsPerHundred proc
+ 000005A7  BA 00000000			mov edx, 0		; Clear upper register
+ 000005AC  BB 00000064			mov ebx, 100	; Divisor = 100 words
+ 000005B1  F7 F3			div ebx			; EAX = 100s of chars typed
+
+ 000005B3  83 F8 00			cmp eax, 0			; 100s of chars typed is 0?
+ 000005B6  75 05			jne MinutesNotZero
+ 000005B8  B8 00000001			mov eax, 1			; Yes: Round up to 1
+
+ 000005BD			MinutesNotZero:
+					; Calculating errors per 100 chars
+ 000005BD  BA 00000000			mov edx, 0		; Clear upper register
+ 000005C2  8B D8			mov ebx, eax	; Divisor = 100s of chars typed
+ 000005C4  8B C1			mov eax, ecx	; Dividend = Errors typed
+ 000005C6  F7 F3			div ebx			; Errors / 100s of chars typed = Errors per 100, EAX = ErrorsPer100
+
+ 000005C8  C3				ret
+ 000005C9			GetErrorsPerHundred endp
 
 
 				;-------------------------------------------------------------------------------
@@ -825,57 +915,57 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Resets game data for repeat sessions.
 				;-------------------------------------------------------------------------------
- 00000518			ResetGame proc
+ 000005C9			ResetGame proc
 					; Reset scores
- 00000518  C7 05 00003B83 R		mov charsTyped, 0
+ 000005C9  C7 05 00003B83 R		mov charsTyped, 0
 	   00000000
- 00000522  C7 05 00003B87 R		mov backspacesPressed, 0
+ 000005D3  C7 05 00003B87 R		mov backspacesPressed, 0
 	   00000000
- 0000052C  C7 05 00003B8F R		mov linesCleared, 0
+ 000005DD  C7 05 00003B8F R		mov linesCleared, 0
 	   00000000
 
 					; Reset starting distance
- 00000536  C6 05 00003B78 R		mov distanceFromTop, STARTING_DISTANCE
+ 000005E7  C6 05 00003B78 R		mov distanceFromTop, STARTING_DISTANCE
 	   18
 
 					; Reset typing prompt data
- 0000053D  C7 05 00001456 R		mov typingPromptLeftBound, 0
+ 000005EE  C7 05 00001456 R		mov typingPromptLeftBound, 0
 	   00000000
- 00000547  C7 05 0000145A R		mov charIdx, 0
+ 000005F8  C7 05 0000145A R		mov charIdx, 0
 	   00000000
 
 					; Reset timing
- 00000551  C6 05 00003B79 R		mov linePrintTicksElapsed, 0
+ 00000602  C6 05 00003B79 R		mov linePrintTicksElapsed, 0
 	   00
- 00000558  C7 05 00003B7A R		mov typingPromptRightBound, 0
+ 00000609  C7 05 00003B7A R		mov typingPromptRightBound, 0
 	   00000000
- 00000562  C6 05 00003B7E R		mov lineProgressSpeed, STARTING_PROGRESSION_SPEED
-	   14
- 00000569  C7 05 00003B8B R		mov secondsPlayed, 0
+ 00000613  C6 05 00003B7E R		mov lineProgressSpeed, STARTING_PROGRESSION_SPEED
+	   28
+ 0000061A  C7 05 00003B8B R		mov secondsPlayed, 0
 	   00000000
 
- 00000573  B9 00001387			mov ecx, LENGTHOF textColors - 1
- 00000578			ResetColors:
- 00000578  66| C7 04 4D			mov textColors[ecx * TYPE textColors], black+(white*16)
+ 00000624  B9 00001387			mov ecx, LENGTHOF textColors - 1
+ 00000629			ResetColors:
+ 00000629  66| C7 04 4D			mov textColors[ecx * TYPE textColors], black+(white*16)
 	   0000145E R
 	   00F0
- 00000582  E2 F4			loop ResetColors
- 00000584  66| C7 04 4D			mov textColors[ecx * TYPE textColors], black+(white*16)
+ 00000633  E2 F4			loop ResetColors
+ 00000635  66| C7 04 4D			mov textColors[ecx * TYPE textColors], black+(white*16)
 	   0000145E R
 	   00F0
 
- 0000058E  B9 00000001			mov ecx, LENGTHOF lineStatus - 1
- 00000593			ResetLineStatus:
- 00000593  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
+ 0000063F  B9 00000001			mov ecx, LENGTHOF lineStatus - 1
+ 00000644			ResetLineStatus:
+ 00000644  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
 	   00003B6E R
 	   00000000
- 0000059E  E2 D8			loop ResetColors
- 000005A0  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
+ 0000064F  E2 D8			loop ResetColors
+ 00000651  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
 	   00003B6E R
 	   00000000
 
- 000005AB  C3				ret
- 000005AC			ResetGame endp
+ 0000065C  C3				ret
+ 0000065D			ResetGame endp
 
 
 				;-------------------------------------------------------------------------------
@@ -883,18 +973,18 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Updates line status bit string to reflect correct input.
 				;-------------------------------------------------------------------------------
- 000005AC			CorrectInput proc USES eax
- 000005AC  50		   *	    push   eax
- 000005AD  A1 00003B6E R		mov eax, lineStatus[0]
- 000005B2  0F AC 05			shrd lineStatus[TYPE lineStatus], eax, 1
+ 0000065D			CorrectInput proc USES eax
+ 0000065D  50		   *	    push   eax
+ 0000065E  A1 00003B6E R		mov eax, lineStatus[0]
+ 00000663  0F AC 05			shrd lineStatus[TYPE lineStatus], eax, 1
 	   00003B72 R 01
- 000005BA  B8 00000001			mov eax, 1
- 000005BF  0F AC 05			shrd lineStatus[0], eax, 1
+ 0000066B  B8 00000001			mov eax, 1
+ 00000670  0F AC 05			shrd lineStatus[0], eax, 1
 	   00003B6E R 01
 					ret
- 000005C7  58		   *	    pop    eax
- 000005C8  C3		   *	    ret    00000h
- 000005C9			CorrectInput endp
+ 00000678  58		   *	    pop    eax
+ 00000679  C3		   *	    ret    00000h
+ 0000067A			CorrectInput endp
 
 
 				;-------------------------------------------------------------------------------
@@ -902,16 +992,16 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Updates line status bit string to reflect incorrect input.
 				;-------------------------------------------------------------------------------
- 000005C9			WrongInput proc USES eax
- 000005C9  50		   *	    push   eax
- 000005CA  A1 00003B6E R		mov eax, lineStatus[0]
- 000005CF  0F AC 05			shrd lineStatus[TYPE lineStatus], eax, 1
+ 0000067A			WrongInput proc USES eax
+ 0000067A  50		   *	    push   eax
+ 0000067B  A1 00003B6E R		mov eax, lineStatus[0]
+ 00000680  0F AC 05			shrd lineStatus[TYPE lineStatus], eax, 1
 	   00003B72 R 01
- 000005D7  D1 2D 00003B6E R		shr lineStatus[0], 1
+ 00000688  D1 2D 00003B6E R		shr lineStatus[0], 1
 					ret
- 000005DD  58		   *	    pop    eax
- 000005DE  C3		   *	    ret    00000h
- 000005DF			WrongInput endp
+ 0000068E  58		   *	    pop    eax
+ 0000068F  C3		   *	    ret    00000h
+ 00000690			WrongInput endp
 
 
 				;-------------------------------------------------------------------------------
@@ -919,16 +1009,16 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Reverts last change to line status bit string.
 				;-------------------------------------------------------------------------------
- 000005DF			RevertLineStatus proc USES eax
- 000005DF  50		   *	    push   eax
- 000005E0  A1 00003B72 R		mov eax, lineStatus[TYPE lineStatus]
- 000005E5  0F A4 05			shld lineStatus[0], eax, 1
+ 00000690			RevertLineStatus proc USES eax
+ 00000690  50		   *	    push   eax
+ 00000691  A1 00003B72 R		mov eax, lineStatus[TYPE lineStatus]
+ 00000696  0F A4 05			shld lineStatus[0], eax, 1
 	   00003B6E R 01
- 000005ED  D1 25 00003B72 R		shl lineStatus[TYPE lineStatus], 1
+ 0000069E  D1 25 00003B72 R		shl lineStatus[TYPE lineStatus], 1
 					ret
- 000005F3  58		   *	    pop    eax
- 000005F4  C3		   *	    ret    00000h
- 000005F5			RevertLineStatus endp
+ 000006A4  58		   *	    pop    eax
+ 000006A5  C3		   *	    ret    00000h
+ 000006A6			RevertLineStatus endp
 
 
 				;-------------------------------------------------------------------------------
@@ -936,22 +1026,22 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Sets line status bit string to zeros.
 				;-------------------------------------------------------------------------------
- 000005F5			ClearLineStatus proc USES eax
- 000005F5  50		   *	    push   eax
- 000005F6  B9 00000001			mov ecx, LENGTHOF lineStatus - 1
- 000005FB			StatusClearing:
- 000005FB  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
+ 000006A6			ClearLineStatus proc USES eax
+ 000006A6  50		   *	    push   eax
+ 000006A7  B9 00000001			mov ecx, LENGTHOF lineStatus - 1
+ 000006AC			StatusClearing:
+ 000006AC  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
 	   00003B6E R
 	   00000000
- 00000606  E2 F3			loop StatusClearing
- 00000608  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
+ 000006B7  E2 F3			loop StatusClearing
+ 000006B9  C7 04 8D			mov lineStatus[ecx * TYPE lineStatus], 0
 	   00003B6E R
 	   00000000
 
 					ret
- 00000613  58		   *	    pop    eax
- 00000614  C3		   *	    ret    00000h
- 00000615			ClearLineStatus endp
+ 000006C4  58		   *	    pop    eax
+ 000006C5  C3		   *	    ret    00000h
+ 000006C6			ClearLineStatus endp
 
 
 				;-------------------------------------------------------------------------------
@@ -962,58 +1052,58 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				; Returns : CY = 0 if line not completely correct
 				;			CY = 1 if line is completely correct
 				;-------------------------------------------------------------------------------
- 00000615			CheckLineStatus proc USES eax ebx ecx edx
- 00000615  50		   *	    push   eax
- 00000616  53		   *	    push   ebx
- 00000617  51		   *	    push   ecx
- 00000618  52		   *	    push   edx
- 00000619  8B 0D 00001445 R		mov ecx, typingPromptSize
- 0000061F  2B CB			sub ecx, ebx
- 00000621  BA 00000000			mov edx, 0		; Counter for how many times rotated
+ 000006C6			CheckLineStatus proc USES eax ebx ecx edx
+ 000006C6  50		   *	    push   eax
+ 000006C7  53		   *	    push   ebx
+ 000006C8  51		   *	    push   ecx
+ 000006C9  52		   *	    push   edx
+ 000006CA  8B 0D 00001445 R		mov ecx, typingPromptSize
+ 000006D0  2B CB			sub ecx, ebx
+ 000006D2  BA 00000000			mov edx, 0		; Counter for how many times rotated
 
- 00000626  83 F9 40			cmp ecx, LINE_LENGTH
- 00000629  76 05			jbe L_LineCheck
- 0000062B  B9 00000040			mov ecx, LINE_LENGTH
+ 000006D7  83 F9 40			cmp ecx, LINE_LENGTH
+ 000006DA  76 05			jbe L_LineCheck
+ 000006DC  B9 00000040			mov ecx, LINE_LENGTH
 
- 00000630			L_LineCheck:
- 00000630  A1 00003B6E R		mov eax, lineStatus[0]
- 00000635  0F A4 05			shld lineStatus[TYPE lineStatus], eax, 1
+ 000006E1			L_LineCheck:
+ 000006E1  A1 00003B6E R		mov eax, lineStatus[0]
+ 000006E6  0F A4 05			shld lineStatus[TYPE lineStatus], eax, 1
 	   00003B72 R 01
- 0000063D  D1 15 00003B6E R		rcl lineStatus[0], 1
- 00000643  42				inc edx
- 00000644  73 09			jnc IncorrectChar
- 00000646  E2 E8			loop L_LineCheck
+ 000006EE  D1 15 00003B6E R		rcl lineStatus[0], 1
+ 000006F4  42				inc edx
+ 000006F5  73 09			jnc IncorrectChar
+ 000006F7  E2 E8			loop L_LineCheck
 
- 00000648  BF 00000001			mov edi, 1
- 0000064D  EB 05			jmp ReturnBits
+ 000006F9  BF 00000001			mov edi, 1
+ 000006FE  EB 05			jmp ReturnBits
 
- 0000064F			IncorrectChar:
- 0000064F  BF 00000000			mov edi, 0
+ 00000700			IncorrectChar:
+ 00000700  BF 00000000			mov edi, 0
 
- 00000654			ReturnBits:
- 00000654  8B CA			mov ecx, edx
- 00000656			L_ReturnBits:
- 00000656  A1 00003B72 R		mov eax, lineStatus[TYPE lineStatus]
- 0000065B  0F AC 05			shrd lineStatus[0], eax, 1
+ 00000705			ReturnBits:
+ 00000705  8B CA			mov ecx, edx
+ 00000707			L_ReturnBits:
+ 00000707  A1 00003B72 R		mov eax, lineStatus[TYPE lineStatus]
+ 0000070C  0F AC 05			shrd lineStatus[0], eax, 1
 	   00003B6E R 01
- 00000663  D1 1D 00003B72 R		rcr lineStatus[TYPE lineStatus], 1
- 00000669  E2 EB			loop L_ReturnBits
+ 00000714  D1 1D 00003B72 R		rcr lineStatus[TYPE lineStatus], 1
+ 0000071A  E2 EB			loop L_ReturnBits
 
- 0000066B  83 FF 01			cmp edi, 1
- 0000066E  75 03			jne LineIsIncorrect
- 00000670  F9				stc
- 00000671  EB 01			jmp LineIsCorrect
+ 0000071C  83 FF 01			cmp edi, 1
+ 0000071F  75 03			jne LineIsIncorrect
+ 00000721  F9				stc
+ 00000722  EB 01			jmp LineIsCorrect
 
- 00000673			LineIsIncorrect:
- 00000673  F8				clc
- 00000674			LineIsCorrect:
+ 00000724			LineIsIncorrect:
+ 00000724  F8				clc
+ 00000725			LineIsCorrect:
 					ret
- 00000674  5A		   *	    pop    edx
- 00000675  59		   *	    pop    ecx
- 00000676  5B		   *	    pop    ebx
- 00000677  58		   *	    pop    eax
- 00000678  C3		   *	    ret    00000h
- 00000679			CheckLineStatus endp
+ 00000725  5A		   *	    pop    edx
+ 00000726  59		   *	    pop    ecx
+ 00000727  5B		   *	    pop    ebx
+ 00000728  58		   *	    pop    eax
+ 00000729  C3		   *	    ret    00000h
+ 0000072A			CheckLineStatus endp
 
 
 				;-------------------------------------------------------------------------------
@@ -1022,42 +1112,42 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				; Formats seconds as minutes:seconds.
 				; Recieves: EAX = the amount of seconds
 				;-------------------------------------------------------------------------------
- 00000679			TimeFormat proc USES ebx
- 00000679  53		   *	    push   ebx
- 0000067A  BA 00000000			mov edx, 0	; Clear upper register
- 0000067F  BB 0000003C			mov ebx, 60	; Divisor = 60 seconds
- 00000684  F7 F3			div ebx		; EDX = seconds, EAX = minutes
+ 0000072A			TimeFormat proc USES ebx
+ 0000072A  53		   *	    push   ebx
+ 0000072B  BA 00000000			mov edx, 0	; Clear upper register
+ 00000730  BB 0000003C			mov ebx, 60	; Divisor = 60 seconds
+ 00000735  F7 F3			div ebx		; EDX = seconds, EAX = minutes
 
 					; Write minutes
- 00000686  E8 00000000 E		call WriteDec
+ 00000737  E8 00000000 E		call WriteDec
 					mWrite ":"
- 00003BE4		     1		.data		
- 00003BE4 3A 00		     1		??0008 BYTE ":",0	
- 0000068B		     1		.code
- 0000068B  52		     1		push	edx
- 0000068C  BA 00003BE4 R     1		mov	edx,OFFSET ??0008
- 00000691  E8 00000000 E     1		call	WriteString
- 00000696  5A		     1		pop	edx
+ 00003BF8		     1		.data		
+ 00003BF8 3A 00		     1		??0008 BYTE ":",0	
+ 0000073C		     1		.code
+ 0000073C  52		     1		push	edx
+ 0000073D  BA 00003BF8 R     1		mov	edx,OFFSET ??0008
+ 00000742  E8 00000000 E     1		call	WriteString
+ 00000747  5A		     1		pop	edx
 
 					; Write seconds (zero-padded)
- 00000697  8B C2			mov eax, edx
- 00000699  83 F8 0A			cmp eax, 10
- 0000069C  73 0C			jae TwoDigitSec
+ 00000748  8B C2			mov eax, edx
+ 0000074A  83 F8 0A			cmp eax, 10
+ 0000074D  73 0C			jae TwoDigitSec
 					mWrite "0"
- 00003BE6		     1		.data		
- 00003BE6 30 00		     1		??0009 BYTE "0",0	
- 0000069E		     1		.code
- 0000069E  52		     1		push	edx
- 0000069F  BA 00003BE6 R     1		mov	edx,OFFSET ??0009
- 000006A4  E8 00000000 E     1		call	WriteString
- 000006A9  5A		     1		pop	edx
- 000006AA			TwoDigitSec:
- 000006AA  E8 00000000 E		call WriteDec
+ 00003BFA		     1		.data		
+ 00003BFA 30 00		     1		??0009 BYTE "0",0	
+ 0000074F		     1		.code
+ 0000074F  52		     1		push	edx
+ 00000750  BA 00003BFA R     1		mov	edx,OFFSET ??0009
+ 00000755  E8 00000000 E     1		call	WriteString
+ 0000075A  5A		     1		pop	edx
+ 0000075B			TwoDigitSec:
+ 0000075B  E8 00000000 E		call WriteDec
 
 					ret
- 000006AF  5B		   *	    pop    ebx
- 000006B0  C3		   *	    ret    00000h
- 000006B1			TimeFormat endp
+ 00000760  5B		   *	    pop    ebx
+ 00000761  C3		   *	    ret    00000h
+ 00000762			TimeFormat endp
 
 
 				;-------------------------------------------------------------------------------
@@ -1065,195 +1155,195 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Displays game start message.
 				;-------------------------------------------------------------------------------
- 000006B1			GameStart proc
- 000006B1  B9 00000003			mov ecx, 3		; Countdown start number
+ 00000762			GameStart proc
+ 00000762  B9 00000003			mov ecx, 3		; Countdown start number
 
 					; Set color to black on yellow
- 000006B6  B8 000000E0			mov eax, black + (yellow * 16)
- 000006BB  E8 00000000 E		call SetTextColor
+ 00000767  B8 000000E0			mov eax, black + (yellow * 16)
+ 0000076C  E8 00000000 E		call SetTextColor
 
- 000006C0			Countdown:
- 000006C0  B8 000003E8			mov eax, 50 * SECOND_IN_TICKS	; Wait one second
- 000006C5  E8 00000000 E		call Delay
+ 00000771			Countdown:
+ 00000771  B8 000003E8			mov eax, 50 * SECOND_IN_TICKS	; Wait one second
+ 00000776  E8 00000000 E		call Delay
 
 					; Write number
 					mGotoxy PLAY_AREA_X + LINE_LENGTH / 2 - 7, PLAY_AREA_Y + STARTING_DISTANCE / 2
- 000006CA  52		     1		push edx
- 000006CB  B6 0E	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2
- 000006CD  B2 23	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 7
- 000006CF  E8 00000000 E     1		call Gotoxy
- 000006D4  5A		     1		pop  edx
+ 0000077B  52		     1		push edx
+ 0000077C  B6 0E	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2
+ 0000077E  B2 23	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 7
+ 00000780  E8 00000000 E     1		call Gotoxy
+ 00000785  5A		     1		pop  edx
 					mWrite "      "
- 00003BE8		     1		.data		
- 00003BE8 20 20 20 20 20     1		??000A BYTE "      ",0	
+ 00003BFC		     1		.data		
+ 00003BFC 20 20 20 20 20     1		??000A BYTE "      ",0	
 	   20 00
- 000006D5		     1		.code
- 000006D5  52		     1		push	edx
- 000006D6  BA 00003BE8 R     1		mov	edx,OFFSET ??000A
- 000006DB  E8 00000000 E     1		call	WriteString
- 000006E0  5A		     1		pop	edx
- 000006E1  8B C1			mov eax, ecx
- 000006E3  E8 00000000 E		call WriteDec
+ 00000786		     1		.code
+ 00000786  52		     1		push	edx
+ 00000787  BA 00003BFC R     1		mov	edx,OFFSET ??000A
+ 0000078C  E8 00000000 E     1		call	WriteString
+ 00000791  5A		     1		pop	edx
+ 00000792  8B C1			mov eax, ecx
+ 00000794  E8 00000000 E		call WriteDec
 					mWrite "      "
- 00003BEF		     1		.data		
- 00003BEF 20 20 20 20 20     1		??000B BYTE "      ",0	
+ 00003C03		     1		.data		
+ 00003C03 20 20 20 20 20     1		??000B BYTE "      ",0	
 	   20 00
- 000006E8		     1		.code
- 000006E8  52		     1		push	edx
- 000006E9  BA 00003BEF R     1		mov	edx,OFFSET ??000B
- 000006EE  E8 00000000 E     1		call	WriteString
- 000006F3  5A		     1		pop	edx
+ 00000799		     1		.code
+ 00000799  52		     1		push	edx
+ 0000079A  BA 00003C03 R     1		mov	edx,OFFSET ??000B
+ 0000079F  E8 00000000 E     1		call	WriteString
+ 000007A4  5A		     1		pop	edx
 
 					; Move cursor out of center
 					mGotoxy PLAY_AREA_X, PLAY_AREA_Y + STARTING_DISTANCE
- 000006F4  52		     1		push edx
- 000006F5  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
- 000006F7  B2 0A	     1		mov  dl,PLAY_AREA_X
- 000006F9  E8 00000000 E     1		call Gotoxy
- 000006FE  5A		     1		pop  edx
+ 000007A5  52		     1		push edx
+ 000007A6  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
+ 000007A8  B2 0A	     1		mov  dl,PLAY_AREA_X
+ 000007AA  E8 00000000 E     1		call Gotoxy
+ 000007AF  5A		     1		pop  edx
 
- 000006FF  E2 BF			loop Countdown
+ 000007B0  E2 BF			loop Countdown
 
 					; Display START
- 00000701  B8 000003E8			mov eax, 50 * SECOND_IN_TICKS
- 00000706  E8 00000000 E		call Delay
+ 000007B2  B8 000003E8			mov eax, 50 * SECOND_IN_TICKS
+ 000007B7  E8 00000000 E		call Delay
 					mGotoxy PLAY_AREA_X + LINE_LENGTH / 2 - 7, PLAY_AREA_Y + STARTING_DISTANCE / 2
- 0000070B  52		     1		push edx
- 0000070C  B6 0E	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2
- 0000070E  B2 23	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 7
- 00000710  E8 00000000 E     1		call Gotoxy
- 00000715  5A		     1		pop  edx
+ 000007BC  52		     1		push edx
+ 000007BD  B6 0E	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2
+ 000007BF  B2 23	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 7
+ 000007C1  E8 00000000 E     1		call Gotoxy
+ 000007C6  5A		     1		pop  edx
 					mWrite "    START    "
- 00003BF6		     1		.data		
- 00003BF6 20 20 20 20 53     1		??000C BYTE "    START    ",0	
+ 00003C0A		     1		.data		
+ 00003C0A 20 20 20 20 53     1		??000C BYTE "    START    ",0	
 	   54 41 52 54 20
 	   20 20 20 00
- 00000716		     1		.code
- 00000716  52		     1		push	edx
- 00000717  BA 00003BF6 R     1		mov	edx,OFFSET ??000C
- 0000071C  E8 00000000 E     1		call	WriteString
- 00000721  5A		     1		pop	edx
+ 000007C7		     1		.code
+ 000007C7  52		     1		push	edx
+ 000007C8  BA 00003C0A R     1		mov	edx,OFFSET ??000C
+ 000007CD  E8 00000000 E     1		call	WriteString
+ 000007D2  5A		     1		pop	edx
 
 					; Move cursor out of center
 					mGotoxy PLAY_AREA_X, PLAY_AREA_Y + STARTING_DISTANCE
- 00000722  52		     1		push edx
- 00000723  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
- 00000725  B2 0A	     1		mov  dl,PLAY_AREA_X
- 00000727  E8 00000000 E     1		call Gotoxy
- 0000072C  5A		     1		pop  edx
+ 000007D3  52		     1		push edx
+ 000007D4  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
+ 000007D6  B2 0A	     1		mov  dl,PLAY_AREA_X
+ 000007D8  E8 00000000 E     1		call Gotoxy
+ 000007DD  5A		     1		pop  edx
 
 					; Clear displayed messages
- 0000072D  B8 00000000			mov eax, black + (black * 16)		; Set color for display removal
- 00000732  E8 00000000 E		call SetTextColor
- 00000737  B8 000003E8			mov eax, TICK * SECOND_IN_TICKS
- 0000073C  E8 00000000 E		call Delay
+ 000007DE  B8 00000000			mov eax, black + (black * 16)		; Set color for display removal
+ 000007E3  E8 00000000 E		call SetTextColor
+ 000007E8  B8 000003E8			mov eax, TICK * SECOND_IN_TICKS
+ 000007ED  E8 00000000 E		call Delay
 					mGotoxy PLAY_AREA_X + LINE_LENGTH / 2 - 7, PLAY_AREA_Y + STARTING_DISTANCE / 2
- 00000741  52		     1		push edx
- 00000742  B6 0E	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2
- 00000744  B2 23	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 7
- 00000746  E8 00000000 E     1		call Gotoxy
- 0000074B  5A		     1		pop  edx
+ 000007F2  52		     1		push edx
+ 000007F3  B6 0E	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2
+ 000007F5  B2 23	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 7
+ 000007F7  E8 00000000 E     1		call Gotoxy
+ 000007FC  5A		     1		pop  edx
 					mWrite "             "
- 00003C04		     1		.data		
- 00003C04 20 20 20 20 20     1		??000D BYTE "             ",0	
+ 00003C18		     1		.data		
+ 00003C18 20 20 20 20 20     1		??000D BYTE "             ",0	
 	   20 20 20 20 20
 	   20 20 20 00
- 0000074C		     1		.code
- 0000074C  52		     1		push	edx
- 0000074D  BA 00003C04 R     1		mov	edx,OFFSET ??000D
- 00000752  E8 00000000 E     1		call	WriteString
- 00000757  5A		     1		pop	edx
+ 000007FD		     1		.code
+ 000007FD  52		     1		push	edx
+ 000007FE  BA 00003C18 R     1		mov	edx,OFFSET ??000D
+ 00000803  E8 00000000 E     1		call	WriteString
+ 00000808  5A		     1		pop	edx
 
- 00000758  C3				ret
- 00000759			GameStart endp
+ 00000809  C3				ret
+ 0000080A			GameStart endp
 
 				;-------------------------------------------------------------------------------
 				; GameOver
 				;
 				; Displays game over message.
 				;-------------------------------------------------------------------------------
- 00000759			GameOver proc
- 00000759  B9 00001387			mov ecx, LENGTHOF textColors - 1
+ 0000080A			GameOver proc
+ 0000080A  B9 00001387			mov ecx, LENGTHOF textColors - 1
 
- 0000075E			ResetColors:
- 0000075E  66| C7 04 4D			mov textColors[ecx * TYPE textColors], white+(red*16)
+ 0000080F			ResetColors:
+ 0000080F  66| C7 04 4D			mov textColors[ecx * TYPE textColors], white+(red*16)
 	   0000145E R
 	   004F
- 00000768  E2 F4			loop ResetColors
- 0000076A  66| C7 04 4D			mov textColors[ecx * TYPE textColors], white+(red*16)
+ 00000819  E2 F4			loop ResetColors
+ 0000081B  66| C7 04 4D			mov textColors[ecx * TYPE textColors], white+(red*16)
 	   0000145E R
 	   004F
 
 					; Rewrite prompt in red
- 00000774  B2 0A			mov dl, PLAY_AREA_X
- 00000776  B6 02			mov dh, PLAY_AREA_Y
- 00000778  E8 FFFFFC86			call UpdateCursorPos
+ 00000825  B2 0A			mov dl, PLAY_AREA_X
+ 00000827  B6 02			mov dh, PLAY_AREA_Y
+ 00000829  E8 FFFFFBF6			call UpdateCursorPos
 
- 0000077D  BA 000000BD R		mov edx, OFFSET typingPrompt
- 00000782  8B 1D 00001456 R		mov ebx, typingPromptLeftBound
- 00000788  8B 0D 00003B7A R		mov ecx, typingPromptRightBound
- 0000078E  E8 FFFFFBFF			call ReprintPrompt
+ 0000082E  BA 000000BD R		mov edx, OFFSET typingPrompt
+ 00000833  8B 1D 00001456 R		mov ebx, typingPromptLeftBound
+ 00000839  8B 0D 00003B7A R		mov ecx, typingPromptRightBound
+ 0000083F  E8 FFFFFB6F			call ReprintPrompt
 
- 00000793  B2 0A			mov dl, PLAY_AREA_X
- 00000795  B6 02			mov dh, PLAY_AREA_Y
- 00000797  E8 FFFFFC67			call UpdateCursorPos
+ 00000844  B2 0A			mov dl, PLAY_AREA_X
+ 00000846  B6 02			mov dh, PLAY_AREA_Y
+ 00000848  E8 FFFFFBD7			call UpdateCursorPos
 
- 0000079C  B8 00000BB8			mov eax, TICK * SECOND_IN_TICKS * 3
- 000007A1  E8 00000000 E		call Delay
+ 0000084D  B8 000007D0			mov eax, TICK * SECOND_IN_TICKS * 2
+ 00000852  E8 00000000 E		call Delay
 
- 000007A6			ClearLines:
- 000007A6  B8 00000064			mov eax, TICK * 2
- 000007AB  E8 00000000 E		call Delay
- 000007B0  E8 FFFFFC84			call ClearDisplayLine
- 000007B5  E8 FFFFFC69			call Newline
- 000007BA  80 3D 00003B77 R		cmp cursorY, PLAY_AREA_Y + STARTING_DISTANCE
+ 00000857			ClearLines:
+ 00000857  B8 00000064			mov eax, TICK * 2
+ 0000085C  E8 00000000 E		call Delay
+ 00000861  E8 FFFFFBF4			call ClearDisplayLine
+ 00000866  E8 FFFFFBD9			call Newline
+ 0000086B  80 3D 00003B77 R		cmp cursorY, PLAY_AREA_Y + STARTING_DISTANCE
 	   1A
- 000007C1  75 E3			jne ClearLines
+ 00000872  75 E3			jne ClearLines
 
 					; Display GAME OVER
- 000007C3  B8 000000E0			mov eax, black + (yellow * 16)		; Set color for highlited message
- 000007C8  E8 00000000 E		call SetTextColor
+ 00000874  B8 000000E0			mov eax, black + (yellow * 16)		; Set color for highlited message
+ 00000879  E8 00000000 E		call SetTextColor
 					mGotoxy PLAY_AREA_X + LINE_LENGTH / 2 - 10, PLAY_AREA_Y + STARTING_DISTANCE / 2 - LINE_SPACING
- 000007CD  52		     1		push edx
- 000007CE  B6 0C	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2 - LINE_SPACING
- 000007D0  B2 20	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 10
- 000007D2  E8 00000000 E     1		call Gotoxy
- 000007D7  5A		     1		pop  edx
+ 0000087E  52		     1		push edx
+ 0000087F  B6 0C	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2 - LINE_SPACING
+ 00000881  B2 20	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 10
+ 00000883  E8 00000000 E     1		call Gotoxy
+ 00000888  5A		     1		pop  edx
 					mWrite "    GAME OVER    "
- 00003C12		     1		.data		
- 00003C12 20 20 20 20 47     1		??000E BYTE "    GAME OVER    ",0	
+ 00003C26		     1		.data		
+ 00003C26 20 20 20 20 47     1		??000E BYTE "    GAME OVER    ",0	
 	   41 4D 45 20 4F
 	   56 45 52 20 20
 	   20 20 00
- 000007D8		     1		.code
- 000007D8  52		     1		push	edx
- 000007D9  BA 00003C12 R     1		mov	edx,OFFSET ??000E
- 000007DE  E8 00000000 E     1		call	WriteString
- 000007E3  5A		     1		pop	edx
+ 00000889		     1		.code
+ 00000889  52		     1		push	edx
+ 0000088A  BA 00003C26 R     1		mov	edx,OFFSET ??000E
+ 0000088F  E8 00000000 E     1		call	WriteString
+ 00000894  5A		     1		pop	edx
 
 					; Move cursor out of center
 					mGotoxy PLAY_AREA_X, PLAY_AREA_Y + STARTING_DISTANCE
- 000007E4  52		     1		push edx
- 000007E5  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
- 000007E7  B2 0A	     1		mov  dl,PLAY_AREA_X
- 000007E9  E8 00000000 E     1		call Gotoxy
- 000007EE  5A		     1		pop  edx
- 000007EF  B8 000007D0			mov eax, TICK * SECOND_IN_TICKS * 2
- 000007F4  E8 00000000 E		call Delay
+ 00000895  52		     1		push edx
+ 00000896  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
+ 00000898  B2 0A	     1		mov  dl,PLAY_AREA_X
+ 0000089A  E8 00000000 E     1		call Gotoxy
+ 0000089F  5A		     1		pop  edx
+ 000008A0  B8 000007D0			mov eax, TICK * SECOND_IN_TICKS * 2
+ 000008A5  E8 00000000 E		call Delay
 
 					; Display "Press any key to continue..."
 					mGotoxy PLAY_AREA_X + LINE_LENGTH / 2 - 15, PLAY_AREA_Y + STARTING_DISTANCE / 2 
- 000007F9  52		     1		push edx
- 000007FA  B6 0E	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2
- 000007FC  B2 1B	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 15
- 000007FE  E8 00000000 E     1		call Gotoxy
- 00000803  5A		     1		pop  edx
- 00000804  B8 0000000E			mov eax, yellow + (black * 16)		; Set color for standard message
- 00000809  E8 00000000 E		call SetTextColor
- 0000080E  E8 00000000 E		call WaitMsg
+ 000008AA  52		     1		push edx
+ 000008AB  B6 0E	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2
+ 000008AD  B2 1B	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 15
+ 000008AF  E8 00000000 E     1		call Gotoxy
+ 000008B4  5A		     1		pop  edx
+ 000008B5  B8 0000000E			mov eax, yellow + (black * 16)		; Set color for standard message
+ 000008BA  E8 00000000 E		call SetTextColor
+ 000008BF  E8 00000000 E		call WaitMsg
 
- 00000813  C3				ret
- 00000814			GameOver endp
+ 000008C4  C3				ret
+ 000008C5			GameOver endp
 
 
 				;-------------------------------------------------------------------------------
@@ -1261,56 +1351,56 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Displays level cleared message.
 				;-------------------------------------------------------------------------------
- 00000814			LevelCleared proc
- 00000814  B9 00000003			mov ecx, 3		; Countdown start number
+ 000008C5			LevelCleared proc
+ 000008C5  B9 00000003			mov ecx, 3		; Countdown start number
 
 					; Set color to black on yellow
- 00000819  B8 000000E0			mov eax, black + (yellow * 16)
- 0000081E  E8 00000000 E		call SetTextColor
+ 000008CA  B8 000000E0			mov eax, black + (yellow * 16)
+ 000008CF  E8 00000000 E		call SetTextColor
 
 					; Display LEVEL CLEARED
 					mGotoxy PLAY_AREA_X + LINE_LENGTH / 2 - 12, PLAY_AREA_Y + STARTING_DISTANCE / 2 - LINE_SPACING
- 00000823  52		     1		push edx
- 00000824  B6 0C	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2 - LINE_SPACING
- 00000826  B2 1E	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 12
- 00000828  E8 00000000 E     1		call Gotoxy
- 0000082D  5A		     1		pop  edx
+ 000008D4  52		     1		push edx
+ 000008D5  B6 0C	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2 - LINE_SPACING
+ 000008D7  B2 1E	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 12
+ 000008D9  E8 00000000 E     1		call Gotoxy
+ 000008DE  5A		     1		pop  edx
 					mWrite "    LEVEL CLEARED    "
- 00003C24		     1		.data		
- 00003C24 20 20 20 20 4C     1		??000F BYTE "    LEVEL CLEARED    ",0	
+ 00003C38		     1		.data		
+ 00003C38 20 20 20 20 4C     1		??000F BYTE "    LEVEL CLEARED    ",0	
 	   45 56 45 4C 20
 	   43 4C 45 41 52
 	   45 44 20 20 20
 	   20 00
- 0000082E		     1		.code
- 0000082E  52		     1		push	edx
- 0000082F  BA 00003C24 R     1		mov	edx,OFFSET ??000F
- 00000834  E8 00000000 E     1		call	WriteString
- 00000839  5A		     1		pop	edx
+ 000008DF		     1		.code
+ 000008DF  52		     1		push	edx
+ 000008E0  BA 00003C38 R     1		mov	edx,OFFSET ??000F
+ 000008E5  E8 00000000 E     1		call	WriteString
+ 000008EA  5A		     1		pop	edx
 
 					; Move cursor out of center
 					mGotoxy PLAY_AREA_X, PLAY_AREA_Y + STARTING_DISTANCE
- 0000083A  52		     1		push edx
- 0000083B  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
- 0000083D  B2 0A	     1		mov  dl,PLAY_AREA_X
- 0000083F  E8 00000000 E     1		call Gotoxy
- 00000844  5A		     1		pop  edx
- 00000845  B8 000007D0			mov eax, TICK * SECOND_IN_TICKS * 2
- 0000084A  E8 00000000 E		call Delay
+ 000008EB  52		     1		push edx
+ 000008EC  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
+ 000008EE  B2 0A	     1		mov  dl,PLAY_AREA_X
+ 000008F0  E8 00000000 E     1		call Gotoxy
+ 000008F5  5A		     1		pop  edx
+ 000008F6  B8 000007D0			mov eax, TICK * SECOND_IN_TICKS * 2
+ 000008FB  E8 00000000 E		call Delay
 
 					; Display "Press any key to continue..."
 					mGotoxy PLAY_AREA_X + LINE_LENGTH / 2 - 15, PLAY_AREA_Y + STARTING_DISTANCE / 2 
- 0000084F  52		     1		push edx
- 00000850  B6 0E	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2
- 00000852  B2 1B	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 15
- 00000854  E8 00000000 E     1		call Gotoxy
- 00000859  5A		     1		pop  edx
- 0000085A  B8 0000000E			mov eax, yellow + (black * 16)		; Set color for standard message
- 0000085F  E8 00000000 E		call SetTextColor
- 00000864  E8 00000000 E		call WaitMsg
+ 00000900  52		     1		push edx
+ 00000901  B6 0E	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE / 2
+ 00000903  B2 1B	     1		mov  dl,PLAY_AREA_X + LINE_LENGTH / 2 - 15
+ 00000905  E8 00000000 E     1		call Gotoxy
+ 0000090A  5A		     1		pop  edx
+ 0000090B  B8 0000000E			mov eax, yellow + (black * 16)		; Set color for standard message
+ 00000910  E8 00000000 E		call SetTextColor
+ 00000915  E8 00000000 E		call WaitMsg
 
- 00000869  C3				ret
- 0000086A			LevelCleared endp
+ 0000091A  C3				ret
+ 0000091B			LevelCleared endp
 
 
 				;-------------------------------------------------------------------------------
@@ -1318,160 +1408,195 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Displays the static graphic elements of the game.
 				;-------------------------------------------------------------------------------
- 0000086A			DisplayPlayArea proc
+ 0000091B			DisplayPlayArea proc
 					; Game title
- 0000086A  B8 000000E0			mov eax, black + (yellow * 16)
- 0000086F  E8 00000000 E		call SetTextColor
+ 0000091B  B8 000000E0			mov eax, black + (yellow * 16)
+ 00000920  E8 00000000 E		call SetTextColor
 					mGotoxy INFO_COLUMN_X, PLAY_AREA_Y + 2
- 00000874  52		     1		push edx
- 00000875  B6 04	     1		mov  dh,PLAY_AREA_Y + 2
- 00000877  B2 50	     1		mov  dl,INFO_COLUMN_X
- 00000879  E8 00000000 E     1		call Gotoxy
- 0000087E  5A		     1		pop  edx
+ 00000925  52		     1		push edx
+ 00000926  B6 04	     1		mov  dh,PLAY_AREA_Y + 2
+ 00000928  B2 50	     1		mov  dl,INFO_COLUMN_X
+ 0000092A  E8 00000000 E     1		call Gotoxy
+ 0000092F  5A		     1		pop  edx
 					mWrite "    TYPING TUTOR    "
- 00003C3A		     1		.data		
- 00003C3A 20 20 20 20 54     1		??0010 BYTE "    TYPING TUTOR    ",0	
+ 00003C4E		     1		.data		
+ 00003C4E 20 20 20 20 54     1		??0010 BYTE "    TYPING TUTOR    ",0	
 	   59 50 49 4E 47
 	   20 54 55 54 4F
 	   52 20 20 20 20
 	   00
- 0000087F		     1		.code
- 0000087F  52		     1		push	edx
- 00000880  BA 00003C3A R     1		mov	edx,OFFSET ??0010
- 00000885  E8 00000000 E     1		call	WriteString
- 0000088A  5A		     1		pop	edx
+ 00000930		     1		.code
+ 00000930  52		     1		push	edx
+ 00000931  BA 00003C4E R     1		mov	edx,OFFSET ??0010
+ 00000936  E8 00000000 E     1		call	WriteString
+ 0000093B  5A		     1		pop	edx
 
 					; Top divider
- 0000088B  B8 0000000E			mov eax, yellow + (black * 16)
- 00000890  E8 00000000 E		call SetTextColor
+ 0000093C  B8 0000000E			mov eax, yellow + (black * 16)
+ 00000941  E8 00000000 E		call SetTextColor
 					mGotoxy PLAY_AREA_X, PLAY_AREA_Y - 1
- 00000895  52		     1		push edx
- 00000896  B6 01	     1		mov  dh,PLAY_AREA_Y - 1
- 00000898  B2 0A	     1		mov  dl,PLAY_AREA_X
- 0000089A  E8 00000000 E     1		call Gotoxy
- 0000089F  5A		     1		pop  edx
+ 00000946  52		     1		push edx
+ 00000947  B6 01	     1		mov  dh,PLAY_AREA_Y - 1
+ 00000949  B2 0A	     1		mov  dl,PLAY_AREA_X
+ 0000094B  E8 00000000 E     1		call Gotoxy
+ 00000950  5A		     1		pop  edx
 					mWriteString OFFSET divider
- 000008A0  52		     1		push edx
- 000008A1  BA 00000065 R     1		mov  edx,OFFSET OFFSET divider
- 000008A6  E8 00000000 E     1		call WriteString
- 000008AB  5A		     1		pop  edx
+ 00000951  52		     1		push edx
+ 00000952  BA 00000065 R     1		mov  edx,OFFSET OFFSET divider
+ 00000957  E8 00000000 E     1		call WriteString
+ 0000095C  5A		     1		pop  edx
 
 					; Bottom divider
 					mGotoxy PLAY_AREA_X, PLAY_AREA_Y + STARTING_DISTANCE
- 000008AC  52		     1		push edx
- 000008AD  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
- 000008AF  B2 0A	     1		mov  dl,PLAY_AREA_X
- 000008B1  E8 00000000 E     1		call Gotoxy
- 000008B6  5A		     1		pop  edx
+ 0000095D  52		     1		push edx
+ 0000095E  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
+ 00000960  B2 0A	     1		mov  dl,PLAY_AREA_X
+ 00000962  E8 00000000 E     1		call Gotoxy
+ 00000967  5A		     1		pop  edx
 					mWriteString OFFSET divider
- 000008B7  52		     1		push edx
- 000008B8  BA 00000065 R     1		mov  edx,OFFSET OFFSET divider
- 000008BD  E8 00000000 E     1		call WriteString
- 000008C2  5A		     1		pop  edx
+ 00000968  52		     1		push edx
+ 00000969  BA 00000065 R     1		mov  edx,OFFSET OFFSET divider
+ 0000096E  E8 00000000 E     1		call WriteString
+ 00000973  5A		     1		pop  edx
 
 					; Scoreboard labels
 					mGotoxy INFO_COLUMN_X, SCOREBOARD_Y
- 000008C3  52		     1		push edx
- 000008C4  B6 06	     1		mov  dh,SCOREBOARD_Y
- 000008C6  B2 50	     1		mov  dl,INFO_COLUMN_X
- 000008C8  E8 00000000 E     1		call Gotoxy
- 000008CD  5A		     1		pop  edx
+ 00000974  52		     1		push edx
+ 00000975  B6 06	     1		mov  dh,SCOREBOARD_Y
+ 00000977  B2 50	     1		mov  dl,INFO_COLUMN_X
+ 00000979  E8 00000000 E     1		call Gotoxy
+ 0000097E  5A		     1		pop  edx
 					mWrite "Minutes Elapsed   : "
- 00003C4F		     1		.data		
- 00003C4F 4D 69 6E 75 74     1		??0011 BYTE "Minutes Elapsed   : ",0	
+ 00003C63		     1		.data		
+ 00003C63 4D 69 6E 75 74     1		??0011 BYTE "Minutes Elapsed   : ",0	
 	   65 73 20 45 6C
 	   61 70 73 65 64
 	   20 20 20 3A 20
 	   00
- 000008CE		     1		.code
- 000008CE  52		     1		push	edx
- 000008CF  BA 00003C4F R     1		mov	edx,OFFSET ??0011
- 000008D4  E8 00000000 E     1		call	WriteString
- 000008D9  5A		     1		pop	edx
+ 0000097F		     1		.code
+ 0000097F  52		     1		push	edx
+ 00000980  BA 00003C63 R     1		mov	edx,OFFSET ??0011
+ 00000985  E8 00000000 E     1		call	WriteString
+ 0000098A  5A		     1		pop	edx
 					mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING
- 000008DA  52		     1		push edx
- 000008DB  B6 08	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING
- 000008DD  B2 50	     1		mov  dl,INFO_COLUMN_X
- 000008DF  E8 00000000 E     1		call Gotoxy
- 000008E4  5A		     1		pop  edx
+ 0000098B  52		     1		push edx
+ 0000098C  B6 08	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING
+ 0000098E  B2 50	     1		mov  dl,INFO_COLUMN_X
+ 00000990  E8 00000000 E     1		call Gotoxy
+ 00000995  5A		     1		pop  edx
 					mWrite "Lines Cleared     : "
- 00003C64		     1		.data		
- 00003C64 4C 69 6E 65 73     1		??0012 BYTE "Lines Cleared     : ",0	
+ 00003C78		     1		.data		
+ 00003C78 4C 69 6E 65 73     1		??0012 BYTE "Lines Cleared     : ",0	
 	   20 43 6C 65 61
 	   72 65 64 20 20
 	   20 20 20 3A 20
 	   00
- 000008E5		     1		.code
- 000008E5  52		     1		push	edx
- 000008E6  BA 00003C64 R     1		mov	edx,OFFSET ??0012
- 000008EB  E8 00000000 E     1		call	WriteString
- 000008F0  5A		     1		pop	edx
+ 00000996		     1		.code
+ 00000996  52		     1		push	edx
+ 00000997  BA 00003C78 R     1		mov	edx,OFFSET ??0012
+ 0000099C  E8 00000000 E     1		call	WriteString
+ 000009A1  5A		     1		pop	edx
 					mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 2
- 000008F1  52		     1		push edx
- 000008F2  B6 0A	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING * 2
- 000008F4  B2 50	     1		mov  dl,INFO_COLUMN_X
- 000008F6  E8 00000000 E     1		call Gotoxy
- 000008FB  5A		     1		pop  edx
+ 000009A2  52		     1		push edx
+ 000009A3  B6 0A	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING * 2
+ 000009A5  B2 50	     1		mov  dl,INFO_COLUMN_X
+ 000009A7  E8 00000000 E     1		call Gotoxy
+ 000009AC  5A		     1		pop  edx
 					mWrite "Characters Typed  : "
- 00003C79		     1		.data		
- 00003C79 43 68 61 72 61     1		??0013 BYTE "Characters Typed  : ",0	
+ 00003C8D		     1		.data		
+ 00003C8D 43 68 61 72 61     1		??0013 BYTE "Characters Typed  : ",0	
 	   63 74 65 72 73
 	   20 54 79 70 65
 	   64 20 20 3A 20
 	   00
- 000008FC		     1		.code
- 000008FC  52		     1		push	edx
- 000008FD  BA 00003C79 R     1		mov	edx,OFFSET ??0013
- 00000902  E8 00000000 E     1		call	WriteString
- 00000907  5A		     1		pop	edx
+ 000009AD		     1		.code
+ 000009AD  52		     1		push	edx
+ 000009AE  BA 00003C8D R     1		mov	edx,OFFSET ??0013
+ 000009B3  E8 00000000 E     1		call	WriteString
+ 000009B8  5A		     1		pop	edx
 					mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 3
- 00000908  52		     1		push edx
- 00000909  B6 0C	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING * 3
- 0000090B  B2 50	     1		mov  dl,INFO_COLUMN_X
- 0000090D  E8 00000000 E     1		call Gotoxy
- 00000912  5A		     1		pop  edx
+ 000009B9  52		     1		push edx
+ 000009BA  B6 0C	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING * 3
+ 000009BC  B2 50	     1		mov  dl,INFO_COLUMN_X
+ 000009BE  E8 00000000 E     1		call Gotoxy
+ 000009C3  5A		     1		pop  edx
 					mWrite "Backspaces Pressed: "
- 00003C8E		     1		.data		
- 00003C8E 42 61 63 6B 73     1		??0014 BYTE "Backspaces Pressed: ",0	
+ 00003CA2		     1		.data		
+ 00003CA2 42 61 63 6B 73     1		??0014 BYTE "Backspaces Pressed: ",0	
 	   70 61 63 65 73
 	   20 50 72 65 73
 	   73 65 64 3A 20
 	   00
- 00000913		     1		.code
- 00000913  52		     1		push	edx
- 00000914  BA 00003C8E R     1		mov	edx,OFFSET ??0014
- 00000919  E8 00000000 E     1		call	WriteString
- 0000091E  5A		     1		pop	edx
-					
+ 000009C4		     1		.code
+ 000009C4  52		     1		push	edx
+ 000009C5  BA 00003CA2 R     1		mov	edx,OFFSET ??0014
+ 000009CA  E8 00000000 E     1		call	WriteString
+ 000009CF  5A		     1		pop	edx
+					mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 4
+ 000009D0  52		     1		push edx
+ 000009D1  B6 0E	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING * 4
+ 000009D3  B2 50	     1		mov  dl,INFO_COLUMN_X
+ 000009D5  E8 00000000 E     1		call Gotoxy
+ 000009DA  5A		     1		pop  edx
+					mWrite "Words Per Minute  : "
+ 00003CB7		     1		.data		
+ 00003CB7 57 6F 72 64 73     1		??0015 BYTE "Words Per Minute  : ",0	
+	   20 50 65 72 20
+	   4D 69 6E 75 74
+	   65 20 20 3A 20
+	   00
+ 000009DB		     1		.code
+ 000009DB  52		     1		push	edx
+ 000009DC  BA 00003CB7 R     1		mov	edx,OFFSET ??0015
+ 000009E1  E8 00000000 E     1		call	WriteString
+ 000009E6  5A		     1		pop	edx
+					mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 5
+ 000009E7  52		     1		push edx
+ 000009E8  B6 10	     1		mov  dh,SCOREBOARD_Y + LINE_SPACING * 5
+ 000009EA  B2 50	     1		mov  dl,INFO_COLUMN_X
+ 000009EC  E8 00000000 E     1		call Gotoxy
+ 000009F1  5A		     1		pop  edx
+					mWrite "Errors Per 100    : "
+ 00003CCC		     1		.data		
+ 00003CCC 45 72 72 6F 72     1		??0016 BYTE "Errors Per 100    : ",0	
+	   73 20 50 65 72
+	   20 31 30 30 20
+	   20 20 20 3A 20
+	   00
+ 000009F2		     1		.code
+ 000009F2  52		     1		push	edx
+ 000009F3  BA 00003CCC R     1		mov	edx,OFFSET ??0016
+ 000009F8  E8 00000000 E     1		call	WriteString
+ 000009FD  5A		     1		pop	edx
 
 					; How to exit prompt
 					mGotoxy INFO_COLUMN_X, PLAY_AREA_Y + STARTING_DISTANCE
- 0000091F  52		     1		push edx
- 00000920  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
- 00000922  B2 50	     1		mov  dl,INFO_COLUMN_X
- 00000924  E8 00000000 E     1		call Gotoxy
- 00000929  5A		     1		pop  edx
+ 000009FE  52		     1		push edx
+ 000009FF  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
+ 00000A01  B2 50	     1		mov  dl,INFO_COLUMN_X
+ 00000A03  E8 00000000 E     1		call Gotoxy
+ 00000A08  5A		     1		pop  edx
 					mWrite "Press ESC to Quit"
- 00003CA3		     1		.data		
- 00003CA3 50 72 65 73 73     1		??0015 BYTE "Press ESC to Quit",0	
+ 00003CE1		     1		.data		
+ 00003CE1 50 72 65 73 73     1		??0017 BYTE "Press ESC to Quit",0	
 	   20 45 53 43 20
 	   74 6F 20 51 75
 	   69 74 00
- 0000092A		     1		.code
- 0000092A  52		     1		push	edx
- 0000092B  BA 00003CA3 R     1		mov	edx,OFFSET ??0015
- 00000930  E8 00000000 E     1		call	WriteString
- 00000935  5A		     1		pop	edx
+ 00000A09		     1		.code
+ 00000A09  52		     1		push	edx
+ 00000A0A  BA 00003CE1 R     1		mov	edx,OFFSET ??0017
+ 00000A0F  E8 00000000 E     1		call	WriteString
+ 00000A14  5A		     1		pop	edx
 
 					; Move cursor out of center
 					mGotoxy PLAY_AREA_X, PLAY_AREA_Y + STARTING_DISTANCE
- 00000936  52		     1		push edx
- 00000937  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
- 00000939  B2 0A	     1		mov  dl,PLAY_AREA_X
- 0000093B  E8 00000000 E     1		call Gotoxy
- 00000940  5A		     1		pop  edx
- 00000941  C3				ret
- 00000942			DisplayPlayArea endp
+ 00000A15  52		     1		push edx
+ 00000A16  B6 1A	     1		mov  dh,PLAY_AREA_Y + STARTING_DISTANCE
+ 00000A18  B2 0A	     1		mov  dl,PLAY_AREA_X
+ 00000A1A  E8 00000000 E     1		call Gotoxy
+ 00000A1F  5A		     1		pop  edx
+ 00000A20  C3				ret
+ 00000A21			DisplayPlayArea endp
 
 
 				;-------------------------------------------------------------------------------
@@ -1479,146 +1604,204 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				;
 				; Displays the stats that were visible in the info column.
 				;-------------------------------------------------------------------------------
- 00000942			DisplayScores proc
+ 00000A21			DisplayScores proc
  = 00000023				STATS_SCREEN_X = 35
- = 0000000A				STATS_SCREEN_Y = 10
+ = 00000008				STATS_SCREEN_Y = 8
 
 					; Game title
- 00000942  B8 000000E0			mov eax, black + (yellow * 16)
- 00000947  E8 00000000 E		call SetTextColor
+ 00000A21  B8 000000E0			mov eax, black + (yellow * 16)
+ 00000A26  E8 00000000 E		call SetTextColor
 					mGotoxy STATS_SCREEN_X, STATS_SCREEN_Y - LINE_SPACING
- 0000094C  52		     1		push edx
- 0000094D  B6 08	     1		mov  dh,STATS_SCREEN_Y - LINE_SPACING
- 0000094F  B2 23	     1		mov  dl,STATS_SCREEN_X
- 00000951  E8 00000000 E     1		call Gotoxy
- 00000956  5A		     1		pop  edx
+ 00000A2B  52		     1		push edx
+ 00000A2C  B6 06	     1		mov  dh,STATS_SCREEN_Y - LINE_SPACING
+ 00000A2E  B2 23	     1		mov  dl,STATS_SCREEN_X
+ 00000A30  E8 00000000 E     1		call Gotoxy
+ 00000A35  5A		     1		pop  edx
 					mWrite "           STATS           "
- 00003CB5		     1		.data		
- 00003CB5 20 20 20 20 20     1		??0016 BYTE "           STATS           ",0	
+ 00003CF3		     1		.data		
+ 00003CF3 20 20 20 20 20     1		??0018 BYTE "           STATS           ",0	
 	   20 20 20 20 20
 	   20 53 54 41 54
 	   53 20 20 20 20
 	   20 20 20 20 20
 	   20 20 00
- 00000957		     1		.code
- 00000957  52		     1		push	edx
- 00000958  BA 00003CB5 R     1		mov	edx,OFFSET ??0016
- 0000095D  E8 00000000 E     1		call	WriteString
- 00000962  5A		     1		pop	edx
+ 00000A36		     1		.code
+ 00000A36  52		     1		push	edx
+ 00000A37  BA 00003CF3 R     1		mov	edx,OFFSET ??0018
+ 00000A3C  E8 00000000 E     1		call	WriteString
+ 00000A41  5A		     1		pop	edx
 
- 00000963  B8 0000000E			mov eax, yellow+(black*16)	; Set to standard message color
- 00000968  E8 00000000 E		call SetTextColor
+ 00000A42  B8 0000000E			mov eax, yellow+(black*16)	; Set to standard message color
+ 00000A47  E8 00000000 E		call SetTextColor
 
 					mGotoxy STATS_SCREEN_X, STATS_SCREEN_Y
-
- 0000096D  52		     1		push edx
- 0000096E  B6 0A	     1		mov  dh,STATS_SCREEN_Y
- 00000970  B2 23	     1		mov  dl,STATS_SCREEN_X
- 00000972  E8 00000000 E     1		call Gotoxy
- 00000977  5A		     1		pop  edx
+ 00000A4C  52		     1		push edx
+ 00000A4D  B6 08	     1		mov  dh,STATS_SCREEN_Y
+ 00000A4F  B2 23	     1		mov  dl,STATS_SCREEN_X
+ 00000A51  E8 00000000 E     1		call Gotoxy
+ 00000A56  5A		     1		pop  edx
 					mWrite "Minutes Elapsed   : "
- 00003CD1		     1		.data		
- 00003CD1 4D 69 6E 75 74     1		??0017 BYTE "Minutes Elapsed   : ",0	
+ 00003D0F		     1		.data		
+ 00003D0F 4D 69 6E 75 74     1		??0019 BYTE "Minutes Elapsed   : ",0	
 	   65 73 20 45 6C
 	   61 70 73 65 64
 	   20 20 20 3A 20
 	   00
- 00000978		     1		.code
- 00000978  52		     1		push	edx
- 00000979  BA 00003CD1 R     1		mov	edx,OFFSET ??0017
- 0000097E  E8 00000000 E     1		call	WriteString
- 00000983  5A		     1		pop	edx
- 00000984  A1 00003B8B R		mov eax, secondsPlayed
- 00000989  E8 FFFFFCEB			call TimeFormat
- 0000098E  B8 00000064			mov eax, TICK * 2
- 00000993  E8 00000000 E		call Delay
-
+ 00000A57		     1		.code
+ 00000A57  52		     1		push	edx
+ 00000A58  BA 00003D0F R     1		mov	edx,OFFSET ??0019
+ 00000A5D  E8 00000000 E     1		call	WriteString
+ 00000A62  5A		     1		pop	edx
+ 00000A63  A1 00003B8B R		mov eax, secondsPlayed
+ 00000A68  E8 FFFFFCBD			call TimeFormat
+ 00000A6D  B8 00000064			mov eax, TICK * 2
+ 00000A72  E8 00000000 E		call Delay
 
 					mGotoxy STATS_SCREEN_X, STATS_SCREEN_Y + LINE_SPACING
- 00000998  52		     1		push edx
- 00000999  B6 0C	     1		mov  dh,STATS_SCREEN_Y + LINE_SPACING
- 0000099B  B2 23	     1		mov  dl,STATS_SCREEN_X
- 0000099D  E8 00000000 E     1		call Gotoxy
- 000009A2  5A		     1		pop  edx
+ 00000A77  52		     1		push edx
+ 00000A78  B6 0A	     1		mov  dh,STATS_SCREEN_Y + LINE_SPACING
+ 00000A7A  B2 23	     1		mov  dl,STATS_SCREEN_X
+ 00000A7C  E8 00000000 E     1		call Gotoxy
+ 00000A81  5A		     1		pop  edx
 					mWrite "Lines Cleared     : "
- 00003CE6		     1		.data		
- 00003CE6 4C 69 6E 65 73     1		??0018 BYTE "Lines Cleared     : ",0	
+ 00003D24		     1		.data		
+ 00003D24 4C 69 6E 65 73     1		??001A BYTE "Lines Cleared     : ",0	
 	   20 43 6C 65 61
 	   72 65 64 20 20
 	   20 20 20 3A 20
 	   00
- 000009A3		     1		.code
- 000009A3  52		     1		push	edx
- 000009A4  BA 00003CE6 R     1		mov	edx,OFFSET ??0018
- 000009A9  E8 00000000 E     1		call	WriteString
- 000009AE  5A		     1		pop	edx
- 000009AF  B2 37			mov dl, STATS_SCREEN_X + SCORE_LABEL_LENGTH
- 000009B1  B6 0C			mov dh, STATS_SCREEN_Y + LINE_SPACING
- 000009B3  E8 FFFFFA4B			call UpdateCursorPos
- 000009B8  A1 00003B8F R		mov eax, linesCleared
- 000009BD  E8 0000007A			call CountUp
- 000009C2  B8 00000064			mov eax, TICK * 2
- 000009C7  E8 00000000 E		call Delay
+ 00000A82		     1		.code
+ 00000A82  52		     1		push	edx
+ 00000A83  BA 00003D24 R     1		mov	edx,OFFSET ??001A
+ 00000A88  E8 00000000 E     1		call	WriteString
+ 00000A8D  5A		     1		pop	edx
+ 00000A8E  B2 37			mov dl, STATS_SCREEN_X + SCORE_LABEL_LENGTH
+ 00000A90  B6 0A			mov dh, STATS_SCREEN_Y + LINE_SPACING
+ 00000A92  E8 FFFFF98D			call UpdateCursorPos
+ 00000A97  A1 00003B8F R		mov eax, linesCleared
+ 00000A9C  E8 000000F2			call CountUp
+ 00000AA1  B8 00000064			mov eax, TICK * 2
+ 00000AA6  E8 00000000 E		call Delay
 					
 					mGotoxy STATS_SCREEN_X, STATS_SCREEN_Y + LINE_SPACING * 2
- 000009CC  52		     1		push edx
- 000009CD  B6 0E	     1		mov  dh,STATS_SCREEN_Y + LINE_SPACING * 2
- 000009CF  B2 23	     1		mov  dl,STATS_SCREEN_X
- 000009D1  E8 00000000 E     1		call Gotoxy
- 000009D6  5A		     1		pop  edx
+ 00000AAB  52		     1		push edx
+ 00000AAC  B6 0C	     1		mov  dh,STATS_SCREEN_Y + LINE_SPACING * 2
+ 00000AAE  B2 23	     1		mov  dl,STATS_SCREEN_X
+ 00000AB0  E8 00000000 E     1		call Gotoxy
+ 00000AB5  5A		     1		pop  edx
 					mWrite "Characters Typed  : "
- 00003CFB		     1		.data		
- 00003CFB 43 68 61 72 61     1		??0019 BYTE "Characters Typed  : ",0	
+ 00003D39		     1		.data		
+ 00003D39 43 68 61 72 61     1		??001B BYTE "Characters Typed  : ",0	
 	   63 74 65 72 73
 	   20 54 79 70 65
 	   64 20 20 3A 20
 	   00
- 000009D7		     1		.code
- 000009D7  52		     1		push	edx
- 000009D8  BA 00003CFB R     1		mov	edx,OFFSET ??0019
- 000009DD  E8 00000000 E     1		call	WriteString
- 000009E2  5A		     1		pop	edx
- 000009E3  B2 37			mov dl, STATS_SCREEN_X + SCORE_LABEL_LENGTH
- 000009E5  B6 0E			mov dh, STATS_SCREEN_Y + LINE_SPACING * 2
- 000009E7  E8 FFFFFA17			call UpdateCursorPos
- 000009EC  A1 00003B83 R		mov eax, charsTyped
- 000009F1  E8 00000046			call CountUp
- 000009F6  B8 00000064			mov eax, TICK * 2
- 000009FB  E8 00000000 E		call Delay
+ 00000AB6		     1		.code
+ 00000AB6  52		     1		push	edx
+ 00000AB7  BA 00003D39 R     1		mov	edx,OFFSET ??001B
+ 00000ABC  E8 00000000 E     1		call	WriteString
+ 00000AC1  5A		     1		pop	edx
+ 00000AC2  B2 37			mov dl, STATS_SCREEN_X + SCORE_LABEL_LENGTH
+ 00000AC4  B6 0C			mov dh, STATS_SCREEN_Y + LINE_SPACING * 2
+ 00000AC6  E8 FFFFF959			call UpdateCursorPos
+ 00000ACB  A1 00003B83 R		mov eax, charsTyped
+ 00000AD0  E8 000000BE			call CountUp
+ 00000AD5  B8 00000064			mov eax, TICK * 2
+ 00000ADA  E8 00000000 E		call Delay
 
 					mGotoxy STATS_SCREEN_X, STATS_SCREEN_Y + LINE_SPACING * 3
- 00000A00  52		     1		push edx
- 00000A01  B6 10	     1		mov  dh,STATS_SCREEN_Y + LINE_SPACING * 3
- 00000A03  B2 23	     1		mov  dl,STATS_SCREEN_X
- 00000A05  E8 00000000 E     1		call Gotoxy
- 00000A0A  5A		     1		pop  edx
+ 00000ADF  52		     1		push edx
+ 00000AE0  B6 0E	     1		mov  dh,STATS_SCREEN_Y + LINE_SPACING * 3
+ 00000AE2  B2 23	     1		mov  dl,STATS_SCREEN_X
+ 00000AE4  E8 00000000 E     1		call Gotoxy
+ 00000AE9  5A		     1		pop  edx
 					mWrite "Backspaces Pressed: "
- 00003D10		     1		.data		
- 00003D10 42 61 63 6B 73     1		??001A BYTE "Backspaces Pressed: ",0	
+ 00003D4E		     1		.data		
+ 00003D4E 42 61 63 6B 73     1		??001C BYTE "Backspaces Pressed: ",0	
 	   70 61 63 65 73
 	   20 50 72 65 73
 	   73 65 64 3A 20
 	   00
- 00000A0B		     1		.code
- 00000A0B  52		     1		push	edx
- 00000A0C  BA 00003D10 R     1		mov	edx,OFFSET ??001A
- 00000A11  E8 00000000 E     1		call	WriteString
- 00000A16  5A		     1		pop	edx
- 00000A17  A1 00003B87 R		mov eax, backspacesPressed
- 00000A1C  E8 00000000 E		call WriteDec
- 00000A21  B8 00000064			mov eax, TICK * 2
- 00000A26  E8 00000000 E		call Delay
+ 00000AEA		     1		.code
+ 00000AEA  52		     1		push	edx
+ 00000AEB  BA 00003D4E R     1		mov	edx,OFFSET ??001C
+ 00000AF0  E8 00000000 E     1		call	WriteString
+ 00000AF5  5A		     1		pop	edx
+ 00000AF6  A1 00003B87 R		mov eax, backspacesPressed
+ 00000AFB  E8 00000000 E		call WriteDec
+ 00000B00  B8 00000064			mov eax, TICK * 2
+ 00000B05  E8 00000000 E		call Delay
 
 					mGotoxy STATS_SCREEN_X, STATS_SCREEN_Y + LINE_SPACING * 4
- 00000A2B  52		     1		push edx
- 00000A2C  B6 12	     1		mov  dh,STATS_SCREEN_Y + LINE_SPACING * 4
- 00000A2E  B2 23	     1		mov  dl,STATS_SCREEN_X
- 00000A30  E8 00000000 E     1		call Gotoxy
- 00000A35  5A		     1		pop  edx
- 00000A36  E8 00000000 E		call WaitMsg
+ 00000B0A  52		     1		push edx
+ 00000B0B  B6 10	     1		mov  dh,STATS_SCREEN_Y + LINE_SPACING * 4
+ 00000B0D  B2 23	     1		mov  dl,STATS_SCREEN_X
+ 00000B0F  E8 00000000 E     1		call Gotoxy
+ 00000B14  5A		     1		pop  edx
+					mWrite "Words Per Minute  : "
+ 00003D63		     1		.data		
+ 00003D63 57 6F 72 64 73     1		??001D BYTE "Words Per Minute  : ",0	
+	   20 50 65 72 20
+	   4D 69 6E 75 74
+	   65 20 20 3A 20
+	   00
+ 00000B15		     1		.code
+ 00000B15  52		     1		push	edx
+ 00000B16  BA 00003D63 R     1		mov	edx,OFFSET ??001D
+ 00000B1B  E8 00000000 E     1		call	WriteString
+ 00000B20  5A		     1		pop	edx
+ 00000B21  8B 0D 00003B83 R		mov ecx, charsTyped
+ 00000B27  A1 00003B8B R		mov eax, secondsPlayed
+ 00000B2C  E8 FFFFFA48			call GetWPM
+ 00000B31  E8 00000000 E		call WriteDec
+ 00000B36  B8 00000064			mov eax, TICK * 2
+ 00000B3B  E8 00000000 E		call Delay
 
- 00000A3B  C3				ret
- 00000A3C			DisplayScores endp
+					mGotoxy STATS_SCREEN_X, STATS_SCREEN_Y + LINE_SPACING * 5
+ 00000B40  52		     1		push edx
+ 00000B41  B6 12	     1		mov  dh,STATS_SCREEN_Y + LINE_SPACING * 5
+ 00000B43  B2 23	     1		mov  dl,STATS_SCREEN_X
+ 00000B45  E8 00000000 E     1		call Gotoxy
+ 00000B4A  5A		     1		pop  edx
+					mWrite "Errors Per 100    : "
+ 00003D78		     1		.data		
+ 00003D78 45 72 72 6F 72     1		??001E BYTE "Errors Per 100    : ",0	
+	   73 20 50 65 72
+	   20 31 30 30 20
+	   20 20 20 3A 20
+	   00
+ 00000B4B		     1		.code
+ 00000B4B  52		     1		push	edx
+ 00000B4C  BA 00003D78 R     1		mov	edx,OFFSET ??001E
+ 00000B51  E8 00000000 E     1		call	WriteString
+ 00000B56  5A		     1		pop	edx
+ 00000B57  A1 00003B83 R		mov eax, charsTyped
+ 00000B5C  8B 0D 00003B93 R		mov ecx, wrongCharCount
+ 00000B62  E8 FFFFFA40			call GetErrorsPerHundred
+ 00000B67  E8 00000000 E		call WriteDec
+ 00000B6C  B8 00000064			mov eax, TICK * 2
+ 00000B71  E8 00000000 E		call Delay
+
+					mGotoxy STATS_SCREEN_X, STATS_SCREEN_Y + LINE_SPACING * 6
+ 00000B76  52		     1		push edx
+ 00000B77  B6 14	     1		mov  dh,STATS_SCREEN_Y + LINE_SPACING * 6
+ 00000B79  B2 23	     1		mov  dl,STATS_SCREEN_X
+ 00000B7B  E8 00000000 E     1		call Gotoxy
+ 00000B80  5A		     1		pop  edx
+					mWrite "Enter name: "
+ 00003D8D		     1		.data		
+ 00003D8D 45 6E 74 65 72     1		??001F BYTE "Enter name: ",0	
+	   20 6E 61 6D 65
+	   3A 20 00
+ 00000B81		     1		.code
+ 00000B81  52		     1		push	edx
+ 00000B82  BA 00003D8D R     1		mov	edx,OFFSET ??001F
+ 00000B87  E8 00000000 E     1		call	WriteString
+ 00000B8C  5A		     1		pop	edx
+ 00000B8D  E8 00000073			call UpdateScoreFile
+
+ 00000B92  C3				ret
+ 00000B93			DisplayScores endp
 
 
 				;-------------------------------------------------------------------------------
@@ -1627,29 +1810,403 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
 				; Displays a rapid count up to a given number.
 				; Receives: EAX = number to count up to
 				;-------------------------------------------------------------------------------
- 00000A3C			CountUp proc
- 00000A3C  8B C8			mov ecx, eax
- 00000A3E  BB 00000000			mov ebx, 0
+ 00000B93			CountUp proc
+ 00000B93  83 F8 00			cmp eax, 0
+ 00000B96  74 30			je IsZero
+ 00000B98  8B C8			mov ecx, eax
+ 00000B9A  BB 00000000			mov ebx, 0
 
- 00000A43			UpCounter:
- 00000A43  B8 00000005			mov eax, 5
- 00000A48  E8 00000000 E		call Delay
+ 00000B9F			UpCounter:
+ 00000B9F  B8 00000005			mov eax, 5
+ 00000BA4  E8 00000000 E		call Delay
 
 					; Increment the counter and display the number
 					mGotoxy cursorX, cursorY
- 00000A4D  52		     1		push edx
- 00000A4E  8A 35 00003B77 R  1		mov  dh,cursorY
- 00000A54  8A 15 00003B76 R  1		mov  dl,cursorX
- 00000A5A  E8 00000000 E     1		call Gotoxy
- 00000A5F  5A		     1		pop  edx
- 00000A60  43				inc ebx
- 00000A61  8B C3			mov eax, ebx
- 00000A63  E8 00000000 E		call WriteDec
+ 00000BA9  52		     1		push edx
+ 00000BAA  8A 35 00003B77 R  1		mov  dh,cursorY
+ 00000BB0  8A 15 00003B76 R  1		mov  dl,cursorX
+ 00000BB6  E8 00000000 E     1		call Gotoxy
+ 00000BBB  5A		     1		pop  edx
+ 00000BBC  43				inc ebx
+ 00000BBD  8B C3			mov eax, ebx
+ 00000BBF  E8 00000000 E		call WriteDec
 
- 00000A68  E2 D9			loop UpCounter
+ 00000BC4  E2 D9			loop UpCounter
 
- 00000A6A  C3				ret
- 00000A6B			CountUp endp
+ 00000BC6  EB 0C			jmp Quit
+
+ 00000BC8			IsZero:
+					mWrite "0"
+ 00003D9A		     1		.data		
+ 00003D9A 30 00		     1		??0020 BYTE "0",0	
+ 00000BC8		     1		.code
+ 00000BC8  52		     1		push	edx
+ 00000BC9  BA 00003D9A R     1		mov	edx,OFFSET ??0020
+ 00000BCE  E8 00000000 E     1		call	WriteString
+ 00000BD3  5A		     1		pop	edx
+
+ 00000BD4			Quit:
+ 00000BD4  C3				ret
+ 00000BD5			CountUp endp
+
+
+				;-------------------------------------------------------------------------------
+				; WriteStrToFile
+				;
+				; Writes a string to a given file.
+				; Receives: outFileHandle (arg 0) = the handle of the file being written to
+				;			strToWrite (arg 1) = the offset of the string to write
+				;			strLen (arg 2)     = the length of the string being written
+				;-------------------------------------------------------------------------------
+ 00000BD5			WriteStrToFile proc, outFileHandle:HANDLE, strToWrite:PTR BYTE, strLen:DWORD
+ 00000BD5  55		   *	    push   ebp
+ 00000BD6  8B EC	   *	    mov    ebp, esp
+ 00000BD8  8B 45 08			mov eax, outFileHandle
+ 00000BDB  8B 55 0C			mov edx, strToWrite
+ 00000BDE  8B 4D 10			mov ecx, strLen
+ 00000BE1  E8 00000000 E		call WriteToFile
+					ret
+ 00000BE6  C9		   *	    leave  
+ 00000BE7  C2 000C	   *	    ret    0000Ch
+ 00000BEA			WriteStrToFile endp
+
+
+				;-------------------------------------------------------------------------------
+				; ClearString
+				;
+				; Clears the contents of a string.
+				; Receives: strToClear (arg 0) = the address of the string to be cleared
+				;			strToClearLen (arg 1) = the length of the string to be cleared
+				;-------------------------------------------------------------------------------
+ 00000BEA			ClearString proc USES eax ecx edx, strToClear:PTR BYTE, strToClearLen:DWORD
+ 00000BEA  55		   *	    push   ebp
+ 00000BEB  8B EC	   *	    mov    ebp, esp
+ 00000BED  50		   *	    push   eax
+ 00000BEE  51		   *	    push   ecx
+ 00000BEF  52		   *	    push   edx
+ 00000BF0  8B 55 08			mov edx, strToClear		; Move address of array into register for ease of use
+ 00000BF3  8B 4D 0C			mov ecx, strToClearLen	; Set the counter for the loop to the length of array
+ 00000BF6  B0 00			mov al, 0				; The value to reset string to
+ 00000BF8			StringClearer:
+ 00000BF8  88 44 0A FF			mov [edx + ecx - 1], al
+ 00000BFC  E2 FA			loop StringClearer
+					ret
+ 00000BFE  5A		   *	    pop    edx
+ 00000BFF  59		   *	    pop    ecx
+ 00000C00  58		   *	    pop    eax
+ 00000C01  C9		   *	    leave  
+ 00000C02  C2 0008	   *	    ret    00008h
+ 00000C05			ClearString endp
+
+
+				;-------------------------------------------------------------------------------
+				; UpdateScoreFile
+				;
+				; Requests a name and updates score file accordingly.
+				;-------------------------------------------------------------------------------
+ 00000C05			UpdateScoreFile proc
+ = 000007D0			SCORE_IN_BUFFER_SIZE = 2000
+ = 000001F5			SCORE_OUT_BUFFER_SIZE = 501
+
+ 00003D9C			.data
+ 00003D9C 73 63 6F 72 65		scoreFile BYTE "scores.txt", 0
+	   73 2E 74 78 74
+	   00
+ 00003DA7 00000000			scoreFileHandle HANDLE ?
+
+ 00003DAB  000007D0 [			inBuffer BYTE SCORE_IN_BUFFER_SIZE DUP(?)
+	    00
+	   ]
+ 0000457B 00000000			scoreBytesRead DWORD ?
+
+ 0000457F  000001F5 [			username BYTE SCORE_OUT_BUFFER_SIZE DUP(?)
+	    00
+	   ]
+ 00004774 00000000			nameLength DWORD ?
+
+ 00004778 0D 0A 0D 0A			fileNewLine BYTE 0Dh, 0Ah, 0Dh, 0Ah
+ 0000477C 20 7C 20			scoreDivider BYTE " | "
+
+ 0000477F 4C 69 6E 65 73		linesClearedLabel BYTE "Lines cleared: "
+	   20 63 6C 65 61
+	   72 65 64 3A 20
+ 0000478E 57 6F 72 64 73		wpmLabel BYTE "Words per minute: "
+	   20 70 65 72 20
+	   6D 69 6E 75 74
+	   65 3A 20
+ 000047A0 45 72 72 6F 72		errorsPerHundredLabel BYTE "Errors per 100 characters: "
+	   73 20 70 65 72
+	   20 31 30 30 20
+	   63 68 61 72 61
+	   63 74 65 72 73
+	   3A 20
+ 000047BB 53 65 63 6F 6E		timePlayedLabel BYTE "Seconds played: "
+	   64 73 20 70 6C
+	   61 79 65 64 3A
+	   20
+
+ 00000C05			.code
+					invoke ClearString, ADDR username, LENGTHOF username
+ 00000C05  68 000001F5	   *	    push   +0000001F5h
+ 00000C0A  68 0000457F R   *	    push   OFFSET username
+ 00000C0F  E8 FFFFFFD6	   *	    call   ClearString
+ 00000C14  C7 05 00004774 R		mov nameLength, 0
+	   00000000
+
+					; Read what was on file
+ 00000C1E  BA 00003D9C R		mov edx, OFFSET scoreFile
+ 00000C23  B9 00003DAB R		mov ecx, OFFSET inBuffer
+ 00000C28  BB 000007D0			mov ebx, SCORE_IN_BUFFER_SIZE
+ 00000C2D  E8 FFFFF68E			call ReadFileToString
+ 00000C32  A3 0000457B R		mov scoreBytesRead, eax
+
+					; Open score file in write mode
+ 00000C37  BA 00003D9C R		mov edx, OFFSET scoreFile
+ 00000C3C  E8 00000000 E		call CreateOutputFile
+ 00000C41  A3 00003DA7 R		mov scoreFileHandle, eax
+
+					; Error checking
+ 00000C46  83 F8 FF			cmp eax, INVALID_HANDLE_VALUE
+ 00000C49  75 16			jne out_file_ok
+					mWrite "Cannot create file"
+ 000047CB		     1		.data		
+ 000047CB 43 61 6E 6E 6F     1		??0021 BYTE "Cannot create file",0	
+	   74 20 63 72 65
+	   61 74 65 20 66
+	   69 6C 65 00
+ 00000C4B		     1		.code
+ 00000C4B  52		     1		push	edx
+ 00000C4C  BA 000047CB R     1		mov	edx,OFFSET ??0021
+ 00000C51  E8 00000000 E     1		call	WriteString
+ 00000C56  5A		     1		pop	edx
+ 00000C57  E8 00000000 E		call Crlf
+ 00000C5C  E9 00000162			jmp quit
+
+ 00000C61			out_file_ok:
+					; Rewrite what was previously stored in score file
+					invoke WriteStrToFile, scoreFileHandle, ADDR inBuffer, scoreBytesRead
+ 00000C61  FF 35 0000457B R *	    push   scoreBytesRead
+ 00000C67  68 00003DAB R   *	    push   OFFSET inBuffer
+ 00000C6C  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000C72  E8 FFFFFF5E	   *	    call   WriteStrToFile
+
+					; Get input for name
+					mReadString username
+
+ 00000C77  51		     1		push ecx
+ 00000C78  52		     1		push edx
+ 00000C79  BA 0000457F R     1		mov  edx,OFFSET username
+ 00000C7E  B9 000001F5	     1		mov  ecx,SIZEOF username
+ 00000C83  E8 00000000 E     1		call ReadString
+ 00000C88  5A		     1		pop  edx
+ 00000C89  59		     1		pop  ecx
+ 00000C8A  A3 00004774 R		mov nameLength, eax
+
+					; Write username to file
+					invoke WriteStrToFile, scoreFileHandle, ADDR username, nameLength
+ 00000C8F  FF 35 00004774 R *	    push   nameLength
+ 00000C95  68 0000457F R   *	    push   OFFSET username
+ 00000C9A  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000CA0  E8 FFFFFF30	   *	    call   WriteStrToFile
+
+					invoke WriteStrToFile, scoreFileHandle, ADDR scoreDivider, LENGTHOF scoreDivider	; Write a divider
+ 00000CA5  6A 03	   *	    push   +000000003h
+ 00000CA7  68 0000477C R   *	    push   OFFSET scoreDivider
+ 00000CAC  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000CB2  E8 FFFFFF1E	   *	    call   WriteStrToFile
+
+					; Write lines cleared
+					invoke WriteStrToFile, scoreFileHandle, ADDR linesClearedLabel, LENGTHOF linesClearedLabel
+ 00000CB7  6A 0F	   *	    push   +00000000Fh
+ 00000CB9  68 0000477F R   *	    push   OFFSET linesClearedLabel
+ 00000CBE  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000CC4  E8 FFFFFF0C	   *	    call   WriteStrToFile
+ 00000CC9  A1 00003B8F R		mov eax, linesCleared
+ 00000CCE  E8 00000127			call IntToString
+					invoke WriteStrToFile, scoreFileHandle, edx, ecx
+ 00000CD3  51		   *	    push   ecx
+ 00000CD4  52		   *	    push   edx
+ 00000CD5  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000CDB  E8 FFFFFEF5	   *	    call   WriteStrToFile
+
+					invoke WriteStrToFile, scoreFileHandle, ADDR scoreDivider, LENGTHOF scoreDivider	; Write a divider
+ 00000CE0  6A 03	   *	    push   +000000003h
+ 00000CE2  68 0000477C R   *	    push   OFFSET scoreDivider
+ 00000CE7  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000CED  E8 FFFFFEE3	   *	    call   WriteStrToFile
+
+					; Write WPM
+					invoke WriteStrToFile, scoreFileHandle, ADDR wpmLabel, LENGTHOF wpmLabel
+ 00000CF2  6A 12	   *	    push   +000000012h
+ 00000CF4  68 0000478E R   *	    push   OFFSET wpmLabel
+ 00000CF9  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000CFF  E8 FFFFFED1	   *	    call   WriteStrToFile
+ 00000D04  A1 00003B8B R		mov eax, secondsPlayed
+ 00000D09  8B 0D 00003B83 R		mov ecx, charsTyped
+ 00000D0F  E8 FFFFF865			call GetWPM
+ 00000D14  E8 000000E1			call IntToString
+					invoke WriteStrToFile, scoreFileHandle, edx, ecx
+ 00000D19  51		   *	    push   ecx
+ 00000D1A  52		   *	    push   edx
+ 00000D1B  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000D21  E8 FFFFFEAF	   *	    call   WriteStrToFile
+
+					invoke WriteStrToFile, scoreFileHandle, ADDR scoreDivider, LENGTHOF scoreDivider	; Write a divider
+ 00000D26  6A 03	   *	    push   +000000003h
+ 00000D28  68 0000477C R   *	    push   OFFSET scoreDivider
+ 00000D2D  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000D33  E8 FFFFFE9D	   *	    call   WriteStrToFile
+
+					; Write errors per 100
+					invoke WriteStrToFile, scoreFileHandle, ADDR errorsPerHundredLabel, LENGTHOF errorsPerHundredLabel
+ 00000D38  6A 1B	   *	    push   +00000001Bh
+ 00000D3A  68 000047A0 R   *	    push   OFFSET errorsPerHundredLabel
+ 00000D3F  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000D45  E8 FFFFFE8B	   *	    call   WriteStrToFile
+ 00000D4A  A1 00003B83 R		mov eax, charsTyped
+ 00000D4F  8B 0D 00003B93 R		mov ecx, wrongCharCount
+ 00000D55  E8 FFFFF84D			call GetErrorsPerHundred
+ 00000D5A  E8 0000009B			call IntToString
+					invoke WriteStrToFile, scoreFileHandle, edx, ecx
+ 00000D5F  51		   *	    push   ecx
+ 00000D60  52		   *	    push   edx
+ 00000D61  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000D67  E8 FFFFFE69	   *	    call   WriteStrToFile
+
+					invoke WriteStrToFile, scoreFileHandle, ADDR scoreDivider, LENGTHOF scoreDivider	; Write a divider
+ 00000D6C  6A 03	   *	    push   +000000003h
+ 00000D6E  68 0000477C R   *	    push   OFFSET scoreDivider
+ 00000D73  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000D79  E8 FFFFFE57	   *	    call   WriteStrToFile
+
+					; Write time played
+					invoke WriteStrToFile, scoreFileHandle, ADDR timePlayedLabel, LENGTHOF timePlayedLabel
+ 00000D7E  6A 10	   *	    push   +000000010h
+ 00000D80  68 000047BB R   *	    push   OFFSET timePlayedLabel
+ 00000D85  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000D8B  E8 FFFFFE45	   *	    call   WriteStrToFile
+ 00000D90  A1 00003B8B R		mov eax, secondsPlayed
+ 00000D95  E8 00000060			call IntToString
+					invoke WriteStrToFile, scoreFileHandle, edx, ecx
+ 00000D9A  51		   *	    push   ecx
+ 00000D9B  52		   *	    push   edx
+ 00000D9C  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000DA2  E8 FFFFFE2E	   *	    call   WriteStrToFile
+
+					; Write a double-spaced new line
+					invoke WriteStrToFile, scoreFileHandle, ADDR fileNewLine, LENGTHOF fileNewLine
+ 00000DA7  6A 04	   *	    push   +000000004h
+ 00000DA9  68 00004778 R   *	    push   OFFSET fileNewLine
+ 00000DAE  FF 35 00003DA7 R *	    push   scoreFileHandle
+ 00000DB4  E8 FFFFFE1C	   *	    call   WriteStrToFile
+
+ 00000DB9  A1 00003DA7 R		mov eax, scoreFileHandle
+ 00000DBE  E8 00000000 E		call CloseFile
+ 00000DC3			quit:
+ 00000DC3  C3				ret
+ 00000DC4			UpdateScoreFile endp
+
+
+				;-------------------------------------------------------------------------------
+				; ReverseString
+				;
+				; Reverses the contents of a string.
+				; Receives: strToReverse (arg 0) = the address of the string to be cleared
+				;			strToReverseLen (arg 1) = the length of the string to be cleared
+				;-------------------------------------------------------------------------------
+ 00000DC4			ReverseString proc USES eax ebx ecx edx, strToReverse:PTR BYTE, strToReverseLen:DWORD
+ 00000DC4  55		   *	    push   ebp
+ 00000DC5  8B EC	   *	    mov    ebp, esp
+ 00000DC7  50		   *	    push   eax
+ 00000DC8  53		   *	    push   ebx
+ 00000DC9  51		   *	    push   ecx
+ 00000DCA  52		   *	    push   edx
+ 00000DCB  8B 55 08			mov edx, strToReverse		; Move address of array into register for ease of use
+ 00000DCE  8B 4D 0C			mov ecx, strToReverseLen	; Set the counter for the loop to the length of array
+ 00000DD1  49				dec ecx
+ 00000DD2  BB 00000000			mov ebx, 0					; Index for character getting
+
+ 00000DD7			StringPusher:
+ 00000DD7  66| 0F B6 04 1A		movzx ax, BYTE PTR [edx + ebx]
+ 00000DDC  66| 50			push ax
+ 00000DDE  43				inc ebx
+ 00000DDF  E2 F6			loop StringPusher
+
+ 00000DE1  8B 4D 0C			mov ecx, strToReverseLen	; Set the counter for the loop to the length of array
+ 00000DE4  49				dec ecx
+ 00000DE5  BB 00000000			mov ebx, 0					; Index for character getting
+ 00000DEA			StringPopper:
+ 00000DEA  66| 58			pop ax
+ 00000DEC  88 04 1A			mov [edx + ebx], al
+ 00000DEF  43				inc ebx
+ 00000DF0  E2 F8			loop StringPopper
+					ret
+ 00000DF2  5A		   *	    pop    edx
+ 00000DF3  59		   *	    pop    ecx
+ 00000DF4  5B		   *	    pop    ebx
+ 00000DF5  58		   *	    pop    eax
+ 00000DF6  C9		   *	    leave  
+ 00000DF7  C2 0008	   *	    ret    00008h
+ 00000DFA			ReverseString endp
+
+
+				;-------------------------------------------------------------------------------
+				; IntToString
+				;
+				; Converts integer to string
+				; Returns:  EDX = offset of integer string
+				;-------------------------------------------------------------------------------
+ 000047DE			.data
+ 000047DE  00000010 [			intStr BYTE 16 DUP(0)
+	    00
+	   ]
+ 000047EE 00				intCharCount BYTE 0
+
+ 00000DFA			.code
+ 00000DFA			IntToString proc
+					; Resetting data
+					invoke ClearString, ADDR intStr, LENGTHOF intStr
+ 00000DFA  6A 10	   *	    push   +000000010h
+ 00000DFC  68 000047DE R   *	    push   OFFSET intStr
+ 00000E01  E8 FFFFFDE4	   *	    call   ClearString
+
+ 00000E06  83 F8 00			cmp eax, 0
+ 00000E09  75 0E			jne NumIsNotZero
+ 00000E0B  C6 05 000047DE R		mov intStr, "0"
+	   30
+ 00000E12  B9 00000001			mov ecx, 1
+ 00000E17  EB 33			jmp Quit
+
+ 00000E19			NumIsNotZero:
+ 00000E19  B9 00000000			mov ecx, 0		; Index for int string array
+ 00000E1E			IntConversionLoop:
+ 00000E1E  BA 00000000			mov edx, 0		; Divide original int by ten
+ 00000E23  BB 0000000A			mov ebx, 10
+ 00000E28  F7 F3			div ebx
+
+ 00000E2A  83 C2 30			add edx, "0"	; Add "0" to remainder to get the number as ASCII
+ 00000E2D  88 91 000047DE R		mov intStr[ecx], dl
+					
+ 00000E33  41				inc ecx				; Move to next character
+
+ 00000E34  83 FA 30			cmp edx, "0"
+ 00000E37  75 E5			jne IntConversionLoop
+
+					; Remove leading zero
+ 00000E39  C6 81 000047DD R		mov intStr[ecx - 1], 0
+	   00
+
+					invoke ReverseString, ADDR intStr, ecx
+ 00000E40  51		   *	    push   ecx
+ 00000E41  68 000047DE R   *	    push   OFFSET intStr
+ 00000E46  E8 FFFFFF79	   *	    call   ReverseString
+
+ 00000E4B  49				dec ecx
+
+ 00000E4C			Quit:
+ 00000E4C  BA 000047DE R		mov edx, OFFSET intStr
+ 00000E51  C3				ret
+ 00000E52			IntToString endp
 
 
 				;-------------------------------------------------------------------------------
@@ -1659,29 +2216,31 @@ TypingTutor.asm(7) : warning A4011:multiple .MODEL directives found : .MODEL ign
  = 00000023			LEADERBOARD_X = 35
  = 0000000A			LEADERBOARD_Y = 10
 
- 00000A6B			LEADERBOARD proc
- 00000A6B  B8 0000000E			mov eax, yellow + (black * 16)
- 00000A70  E8 00000000 E		call SetTextColor
+ 000047EF			.data
 
-					mWrite "not implemented"
- 00003D25		     1		.data		
- 00003D25 6E 6F 74 20 69     1		??001B BYTE "not implemented",0	
-	   6D 70 6C 65 6D
-	   65 6E 74 65 64
-	   00
- 00000A75		     1		.code
- 00000A75  52		     1		push	edx
- 00000A76  BA 00003D25 R     1		mov	edx,OFFSET ??001B
- 00000A7B  E8 00000000 E     1		call	WriteString
- 00000A80  5A		     1		pop	edx
- 00000A81  E8 00000000 E		call Crlf
- 00000A86  E8 00000000 E		call WaitMsg
- 00000A8B  C3				ret
- 00000A8C			LEADERBOARD endp
+ 00000E52			.code
+
+ 00000E52			LEADERBOARD proc
+ 00000E52  BA 00003D9C R		mov edx, OFFSET scoreFile
+ 00000E57  B9 00003DAB R		mov ecx, OFFSET inBuffer
+ 00000E5C  BB 000007D0			mov ebx, SCORE_IN_BUFFER_SIZE
+ 00000E61  E8 FFFFF45A			call ReadFileToString
+
+ 00000E66  B8 0000000E			mov eax, yellow + (black * 16)
+ 00000E6B  E8 00000000 E		call SetTextColor
+
+					mWriteString OFFSET inBuffer
+ 00000E70  52		     1		push edx
+ 00000E71  BA 00003DAB R     1		mov  edx,OFFSET OFFSET inBuffer
+ 00000E76  E8 00000000 E     1		call WriteString
+ 00000E7B  5A		     1		pop  edx
+ 00000E7C  E8 00000000 E		call WaitMsg
+ 00000E81  C3				ret
+ 00000E82			LEADERBOARD endp
 
 
 				end main
-Microsoft (R) Macro Assembler Version 14.38.33133.0	    12/11/23 22:00:55
+Microsoft (R) Macro Assembler Version 14.38.33133.0	    12/12/23 14:23:31
 TypingTutor.asm						     Symbols 2 - 1
 
 
@@ -1793,38 +2352,43 @@ Segments and Groups:
 
 FLAT . . . . . . . . . . . . . .	GROUP
 STACK  . . . . . . . . . . . . .	32 Bit	 00001000 Para	  Stack	  'STACK'	 
-_DATA  . . . . . . . . . . . . .	32 Bit	 00003D35 Para	  Public  'DATA'	
-_TEXT  . . . . . . . . . . . . .	32 Bit	 00000A8C Para	  Public  'CODE'	
+_DATA  . . . . . . . . . . . . .	32 Bit	 000047EF Para	  Public  'DATA'	
+_TEXT  . . . . . . . . . . . . .	32 Bit	 00000E82 Para	  Public  'CODE'	
 
 
 Procedures, parameters, and locals:
 
                 N a m e                 Type     Value    Attr
 
-CheckLineStatus  . . . . . . . .	P Near	 00000615 _TEXT	Length= 00000064 Public STDCALL
-  L_LineCheck  . . . . . . . . .	L Near	 00000630 _TEXT	
-  IncorrectChar  . . . . . . . .	L Near	 0000064F _TEXT	
-  ReturnBits . . . . . . . . . .	L Near	 00000654 _TEXT	
-  L_ReturnBits . . . . . . . . .	L Near	 00000656 _TEXT	
-  LineIsIncorrect  . . . . . . .	L Near	 00000673 _TEXT	
-  LineIsCorrect  . . . . . . . .	L Near	 00000674 _TEXT	
-ClearDisplayLine . . . . . . . .	P Near	 00000439 _TEXT	Length= 00000028 Public STDCALL
-  spaceWrite . . . . . . . . . .	L Near	 00000444 _TEXT	
-ClearLineStatus  . . . . . . . .	P Near	 000005F5 _TEXT	Length= 00000020 Public STDCALL
-  StatusClearing . . . . . . . .	L Near	 000005FB _TEXT	
+CheckLineStatus  . . . . . . . .	P Near	 000006C6 _TEXT	Length= 00000064 Public STDCALL
+  L_LineCheck  . . . . . . . . .	L Near	 000006E1 _TEXT	
+  IncorrectChar  . . . . . . . .	L Near	 00000700 _TEXT	
+  ReturnBits . . . . . . . . . .	L Near	 00000705 _TEXT	
+  L_ReturnBits . . . . . . . . .	L Near	 00000707 _TEXT	
+  LineIsIncorrect  . . . . . . .	L Near	 00000724 _TEXT	
+  LineIsCorrect  . . . . . . . .	L Near	 00000725 _TEXT	
+ClearDisplayLine . . . . . . . .	P Near	 0000045A _TEXT	Length= 00000028 Public STDCALL
+  spaceWrite . . . . . . . . . .	L Near	 00000465 _TEXT	
+ClearLineStatus  . . . . . . . .	P Near	 000006A6 _TEXT	Length= 00000020 Public STDCALL
+  StatusClearing . . . . . . . .	L Near	 000006AC _TEXT	
+ClearString  . . . . . . . . . .	P Near	 00000BEA _TEXT	Length= 0000001B Public STDCALL
+  strToClear . . . . . . . . . .	DWord	 bp + 00000008
+  strToClearLen  . . . . . . . .	DWord	 bp + 0000000C
+  StringClearer  . . . . . . . .	L Near	 00000BF8 _TEXT	
 CloseFile  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 CloseHandle  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-CloseInputFile . . . . . . . . .	P Near	 00000319 _TEXT	Length= 0000000D Public STDCALL
 Clrscr . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-CorrectInput . . . . . . . . . .	P Near	 000005AC _TEXT	Length= 0000001D Public STDCALL
-CountUp  . . . . . . . . . . . .	P Near	 00000A3C _TEXT	Length= 0000002F Public STDCALL
-  UpCounter  . . . . . . . . . .	L Near	 00000A43 _TEXT	
+CorrectInput . . . . . . . . . .	P Near	 0000065D _TEXT	Length= 0000001D Public STDCALL
+CountUp  . . . . . . . . . . . .	P Near	 00000B93 _TEXT	Length= 00000042 Public STDCALL
+  UpCounter  . . . . . . . . . .	L Near	 00000B9F _TEXT	
+  IsZero . . . . . . . . . . . .	L Near	 00000BC8 _TEXT	
+  Quit . . . . . . . . . . . . .	L Near	 00000BD4 _TEXT	
 CreateFileA  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 CreateOutputFile . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 Crlf . . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 Delay  . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-DisplayPlayArea  . . . . . . . .	P Near	 0000086A _TEXT	Length= 000000D8 Public STDCALL
-DisplayScores  . . . . . . . . .	P Near	 00000942 _TEXT	Length= 000000FA Public STDCALL
+DisplayPlayArea  . . . . . . . .	P Near	 0000091B _TEXT	Length= 00000106 Public STDCALL
+DisplayScores  . . . . . . . . .	P Near	 00000A21 _TEXT	Length= 00000172 Public STDCALL
 DumpMem  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 DumpRegs . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 ExitProcess  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -1832,11 +2396,11 @@ FileTimeToDosDateTime  . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 FileTimeToSystemTime . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 FlushConsoleInputBuffer  . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 FormatMessageA . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-GameOver . . . . . . . . . . . .	P Near	 00000759 _TEXT	Length= 000000BB Public STDCALL
-  ResetColors  . . . . . . . . .	L Near	 0000075E _TEXT	
-  ClearLines . . . . . . . . . .	L Near	 000007A6 _TEXT	
-GameStart  . . . . . . . . . . .	P Near	 000006B1 _TEXT	Length= 000000A8 Public STDCALL
-  Countdown  . . . . . . . . . .	L Near	 000006C0 _TEXT	
+GameOver . . . . . . . . . . . .	P Near	 0000080A _TEXT	Length= 000000BB Public STDCALL
+  ResetColors  . . . . . . . . .	L Near	 0000080F _TEXT	
+  ClearLines . . . . . . . . . .	L Near	 00000857 _TEXT	
+GameStart  . . . . . . . . . . .	P Near	 00000762 _TEXT	Length= 000000A8 Public STDCALL
+  Countdown  . . . . . . . . . .	L Near	 00000771 _TEXT	
 GetCommandLineA  . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 GetCommandTail . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 GetConsoleCP . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -1844,6 +2408,8 @@ GetConsoleCursorInfo . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 GetConsoleMode . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 GetConsoleScreenBufferInfo . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 GetDateTime  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetErrorsPerHundred  . . . . . .	P Near	 000005A7 _TEXT	Length= 00000022 Public STDCALL
+  MinutesNotZero . . . . . . . .	L Near	 000005BD _TEXT	
 GetFileTime  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 GetKeyState  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 GetLastError . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -1856,42 +2422,44 @@ GetStdHandle . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 GetSystemTime  . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 GetTextColor . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 GetTickCount . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+GetWPM . . . . . . . . . . . . .	P Near	 00000579 _TEXT	Length= 0000002E Public STDCALL
+  MinutesNotZero . . . . . . . .	L Near	 0000058F _TEXT	
 Gotoxy . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 HeapAlloc  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 HeapCreate . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 HeapDestroy  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 HeapFree . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 HeapSize . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+IntToString  . . . . . . . . . .	P Near	 00000DFA _TEXT	Length= 00000058 Public STDCALL
+  NumIsNotZero . . . . . . . . .	L Near	 00000E19 _TEXT	
+  IntConversionLoop  . . . . . .	L Near	 00000E1E _TEXT	
+  Quit . . . . . . . . . . . . .	L Near	 00000E4C _TEXT	
 IsDigit  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-LEADERBOARD  . . . . . . . . . .	P Near	 00000A6B _TEXT	Length= 00000021 Public STDCALL
-LevelCleared . . . . . . . . . .	P Near	 00000814 _TEXT	Length= 00000056 Public STDCALL
+LEADERBOARD  . . . . . . . . . .	P Near	 00000E52 _TEXT	Length= 00000030 Public STDCALL
+LevelCleared . . . . . . . . . .	P Near	 000008C5 _TEXT	Length= 00000056 Public STDCALL
 LocalFree  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 MessageBoxA  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 MsgBoxAsk  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 MsgBox . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-NewLine  . . . . . . . . . . . .	P Near	 00000423 _TEXT	Length= 00000016 Public STDCALL
-NewPromptLine  . . . . . . . . .	P Near	 00000326 _TEXT	Length= 0000006C Public STDCALL
-  ReturnToOriginalPos  . . . . .	L Near	 0000037E _TEXT	
-OpenFile . . . . . . . . . . . .	P Near	 000002B0 _TEXT	Length= 00000069 Public STDCALL
-  FileOk . . . . . . . . . . . .	L Near	 000002D2 _TEXT	
-  CheckBufferSize  . . . . . . .	L Near	 00000300 _TEXT	
-  Quit . . . . . . . . . . . . .	L Near	 00000318 _TEXT	
+NewLine  . . . . . . . . . . . .	P Near	 00000444 _TEXT	Length= 00000016 Public STDCALL
+NewPromptLine  . . . . . . . . .	P Near	 00000347 _TEXT	Length= 0000006C Public STDCALL
+  ReturnToOriginalPos  . . . . .	L Near	 0000039F _TEXT	
 OpenInputFile  . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-PLAY_GAME  . . . . . . . . . . .	P Near	 000000C5 _TEXT	Length= 000001EB Public STDCALL
-  MainGameLoop . . . . . . . . .	L Near	 00000105 _TEXT	
-  TimerNotSet  . . . . . . . . .	L Near	 0000012E _TEXT	
-  AddLine  . . . . . . . . . . .	L Near	 0000015F _TEXT	
-  IsMaxSpeed . . . . . . . . . .	L Near	 00000174 _TEXT	
-  KeyRead  . . . . . . . . . . .	L Near	 0000017B _TEXT	
-  CheckBackspace . . . . . . . .	L Near	 00000196 _TEXT	
-  checkCharEqual . . . . . . . .	L Near	 000001BE _TEXT	
-  CharNotEqual . . . . . . . . .	L Near	 000001E3 _TEXT	
-  LineEndCheck . . . . . . . . .	L Near	 000001F2 _TEXT	
-  ClearLine  . . . . . . . . . .	L Near	 0000021D _TEXT	
-  finishCheck  . . . . . . . . .	L Near	 00000252 _TEXT	
-  LevelComplete  . . . . . . . .	L Near	 00000281 _TEXT	
-  GameStats  . . . . . . . . . .	L Near	 000002A5 _TEXT	
-  Quit . . . . . . . . . . . . .	L Near	 000002AF _TEXT	
+PLAY_GAME  . . . . . . . . . . .	P Near	 000000C5 _TEXT	Length= 000001FB Public STDCALL
+  MainGameLoop . . . . . . . . .	L Near	 0000010F _TEXT	
+  TimerNotSet  . . . . . . . . .	L Near	 00000138 _TEXT	
+  AddLine  . . . . . . . . . . .	L Near	 00000169 _TEXT	
+  IsMaxSpeed . . . . . . . . . .	L Near	 0000017E _TEXT	
+  KeyRead  . . . . . . . . . . .	L Near	 00000185 _TEXT	
+  CheckBackspace . . . . . . . .	L Near	 000001A0 _TEXT	
+  checkCharEqual . . . . . . . .	L Near	 000001C8 _TEXT	
+  CharNotEqual . . . . . . . . .	L Near	 000001ED _TEXT	
+  LineEndCheck . . . . . . . . .	L Near	 00000202 _TEXT	
+  ClearLine  . . . . . . . . . .	L Near	 0000022D _TEXT	
+  finishCheck  . . . . . . . . .	L Near	 00000262 _TEXT	
+  LevelComplete  . . . . . . . .	L Near	 0000028B _TEXT	
+  GameStats  . . . . . . . . . .	L Near	 000002B5 _TEXT	
+  Quit . . . . . . . . . . . . .	L Near	 000002BF _TEXT	
 ParseDecimal32 . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 ParseInteger32 . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 PeekConsoleInputA  . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -1902,6 +2470,11 @@ ReadChar . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 ReadConsoleA . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 ReadConsoleInputA  . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 ReadDec  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ReadFileToString . . . . . . . .	P Near	 000002C0 _TEXT	Length= 00000087 Public STDCALL
+  FileOk . . . . . . . . . . . .	L Near	 000002EE _TEXT	
+  CheckBufferSize  . . . . . . .	L Near	 0000031E _TEXT	
+  CloseInFile  . . . . . . . . .	L Near	 00000337 _TEXT	
+  Quit . . . . . . . . . . . . .	L Near	 00000346 _TEXT	
 ReadFile . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 ReadFloat  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 ReadFromFile . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -1910,16 +2483,21 @@ ReadInt  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 ReadKeyFlush . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 ReadKey  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 ReadString . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-ReplacePreviousChar  . . . . . .	P Near	 00000461 _TEXT	Length= 00000033 Public STDCALL
-ReprintPrompt  . . . . . . . . .	P Near	 00000392 _TEXT	Length= 00000033 Public STDCALL
-  printLoop  . . . . . . . . . .	L Near	 0000039B _TEXT	
-  writeChars . . . . . . . . . .	L Near	 000003AA _TEXT	
-  continuePrintLoop  . . . . . .	L Near	 000003BF _TEXT	
-  Quit . . . . . . . . . . . . .	L Near	 000003C3 _TEXT	
-ResetGame  . . . . . . . . . . .	P Near	 00000518 _TEXT	Length= 00000094 Public STDCALL
-  ResetColors  . . . . . . . . .	L Near	 00000578 _TEXT	
-  ResetLineStatus  . . . . . . .	L Near	 00000593 _TEXT	
-RevertLineStatus . . . . . . . .	P Near	 000005DF _TEXT	Length= 00000016 Public STDCALL
+ReplacePreviousChar  . . . . . .	P Near	 00000482 _TEXT	Length= 00000033 Public STDCALL
+ReprintPrompt  . . . . . . . . .	P Near	 000003B3 _TEXT	Length= 00000033 Public STDCALL
+  printLoop  . . . . . . . . . .	L Near	 000003BC _TEXT	
+  writeChars . . . . . . . . . .	L Near	 000003CB _TEXT	
+  continuePrintLoop  . . . . . .	L Near	 000003E0 _TEXT	
+  Quit . . . . . . . . . . . . .	L Near	 000003E4 _TEXT	
+ResetGame  . . . . . . . . . . .	P Near	 000005C9 _TEXT	Length= 00000094 Public STDCALL
+  ResetColors  . . . . . . . . .	L Near	 00000629 _TEXT	
+  ResetLineStatus  . . . . . . .	L Near	 00000644 _TEXT	
+ReverseString  . . . . . . . . .	P Near	 00000DC4 _TEXT	Length= 00000036 Public STDCALL
+  strToReverse . . . . . . . . .	DWord	 bp + 00000008
+  strToReverseLen  . . . . . . .	DWord	 bp + 0000000C
+  StringPusher . . . . . . . . .	L Near	 00000DD7 _TEXT	
+  StringPopper . . . . . . . . .	L Near	 00000DEA _TEXT	
+RevertLineStatus . . . . . . . .	P Near	 00000690 _TEXT	Length= 00000016 Public STDCALL
 SetConsoleCursorInfo . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 SetConsoleCursorPosition . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 SetConsoleMode . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -1939,10 +2517,13 @@ Str_length . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 Str_trim . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 Str_ucase  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 SystemTimeToFileTime . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-TimeFormat . . . . . . . . . . .	P Near	 00000679 _TEXT	Length= 00000038 Public STDCALL
-  TwoDigitSec  . . . . . . . . .	L Near	 000006AA _TEXT	
-UpdateCursorPos  . . . . . . . .	P Near	 00000403 _TEXT	Length= 00000020 Public STDCALL
-UpdateScoreboard . . . . . . . .	P Near	 00000494 _TEXT	Length= 00000084 Public STDCALL
+TimeFormat . . . . . . . . . . .	P Near	 0000072A _TEXT	Length= 00000038 Public STDCALL
+  TwoDigitSec  . . . . . . . . .	L Near	 0000075B _TEXT	
+UpdateCursorPos  . . . . . . . .	P Near	 00000424 _TEXT	Length= 00000020 Public STDCALL
+UpdateScoreFile  . . . . . . . .	P Near	 00000C05 _TEXT	Length= 000001BF Public STDCALL
+  out_file_ok  . . . . . . . . .	L Near	 00000C61 _TEXT	
+  quit . . . . . . . . . . . . .	L Near	 00000DC3 _TEXT	
+UpdateScoreboard . . . . . . . .	P Near	 000004B5 _TEXT	Length= 000000C4 Public STDCALL
 WaitMsg  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteBinB  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteBin . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -1953,17 +2534,21 @@ WriteConsoleOutputCharacterA . .	P Near	 00000000 FLAT	Length= 00000000 External
 WriteDec . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteFile  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteFloat . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-WriteFromColorArr  . . . . . . .	P Near	 000003C5 _TEXT	Length= 0000001E Public STDCALL
+WriteFromColorArr  . . . . . . .	P Near	 000003E6 _TEXT	Length= 0000001E Public STDCALL
 WriteHexB  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteHex . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteInt . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteStackFrameName  . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteStackFrame  . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+WriteStrToFile . . . . . . . . .	P Near	 00000BD5 _TEXT	Length= 00000015 Public STDCALL
+  outFileHandle  . . . . . . . .	DWord	 bp + 00000008
+  strToWrite . . . . . . . . . .	DWord	 bp + 0000000C
+  strLen . . . . . . . . . . . .	DWord	 bp + 00000010
 WriteString  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-WriteToColorArr  . . . . . . . .	P Near	 000003E3 _TEXT	Length= 00000020 Public STDCALL
+WriteToColorArr  . . . . . . . .	P Near	 00000404 _TEXT	Length= 00000020 Public STDCALL
 WriteToFile  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteWindowsMsg  . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-WrongInput . . . . . . . . . . .	P Near	 000005C9 _TEXT	Length= 00000016 Public STDCALL
+WrongInput . . . . . . . . . . .	P Near	 0000067A _TEXT	Length= 00000016 Public STDCALL
 main . . . . . . . . . . . . . .	P Near	 00000000 _TEXT	Length= 000000C5 Public STDCALL
   MainMenu . . . . . . . . . . .	L Near	 00000000 _TEXT	
   L1 . . . . . . . . . . . . . .	L Near	 00000099 _TEXT	
@@ -1981,30 +2566,36 @@ Symbols:
 ??0001 . . . . . . . . . . . . .	Byte	 00000027 _DATA	
 ??0002 . . . . . . . . . . . . .	Byte	 00000034 _DATA	
 ??0003 . . . . . . . . . . . . .	Byte	 00000048 _DATA	
-??0004 . . . . . . . . . . . . .	Byte	 00003B93 _DATA	
-??0005 . . . . . . . . . . . . .	Byte	 00003BA6 _DATA	
-??0006 . . . . . . . . . . . . .	Byte	 00003BBB _DATA	
-??0007 . . . . . . . . . . . . .	Byte	 00003BE2 _DATA	
-??0008 . . . . . . . . . . . . .	Byte	 00003BE4 _DATA	
-??0009 . . . . . . . . . . . . .	Byte	 00003BE6 _DATA	
-??000A . . . . . . . . . . . . .	Byte	 00003BE8 _DATA	
-??000B . . . . . . . . . . . . .	Byte	 00003BEF _DATA	
-??000C . . . . . . . . . . . . .	Byte	 00003BF6 _DATA	
-??000D . . . . . . . . . . . . .	Byte	 00003C04 _DATA	
-??000E . . . . . . . . . . . . .	Byte	 00003C12 _DATA	
-??000F . . . . . . . . . . . . .	Byte	 00003C24 _DATA	
-??0010 . . . . . . . . . . . . .	Byte	 00003C3A _DATA	
-??0011 . . . . . . . . . . . . .	Byte	 00003C4F _DATA	
-??0012 . . . . . . . . . . . . .	Byte	 00003C64 _DATA	
-??0013 . . . . . . . . . . . . .	Byte	 00003C79 _DATA	
-??0014 . . . . . . . . . . . . .	Byte	 00003C8E _DATA	
-??0015 . . . . . . . . . . . . .	Byte	 00003CA3 _DATA	
-??0016 . . . . . . . . . . . . .	Byte	 00003CB5 _DATA	
-??0017 . . . . . . . . . . . . .	Byte	 00003CD1 _DATA	
-??0018 . . . . . . . . . . . . .	Byte	 00003CE6 _DATA	
-??0019 . . . . . . . . . . . . .	Byte	 00003CFB _DATA	
-??001A . . . . . . . . . . . . .	Byte	 00003D10 _DATA	
-??001B . . . . . . . . . . . . .	Byte	 00003D25 _DATA	
+??0004 . . . . . . . . . . . . .	Byte	 00003BA7 _DATA	
+??0005 . . . . . . . . . . . . .	Byte	 00003BBA _DATA	
+??0006 . . . . . . . . . . . . .	Byte	 00003BCF _DATA	
+??0007 . . . . . . . . . . . . .	Byte	 00003BF6 _DATA	
+??0008 . . . . . . . . . . . . .	Byte	 00003BF8 _DATA	
+??0009 . . . . . . . . . . . . .	Byte	 00003BFA _DATA	
+??000A . . . . . . . . . . . . .	Byte	 00003BFC _DATA	
+??000B . . . . . . . . . . . . .	Byte	 00003C03 _DATA	
+??000C . . . . . . . . . . . . .	Byte	 00003C0A _DATA	
+??000D . . . . . . . . . . . . .	Byte	 00003C18 _DATA	
+??000E . . . . . . . . . . . . .	Byte	 00003C26 _DATA	
+??000F . . . . . . . . . . . . .	Byte	 00003C38 _DATA	
+??0010 . . . . . . . . . . . . .	Byte	 00003C4E _DATA	
+??0011 . . . . . . . . . . . . .	Byte	 00003C63 _DATA	
+??0012 . . . . . . . . . . . . .	Byte	 00003C78 _DATA	
+??0013 . . . . . . . . . . . . .	Byte	 00003C8D _DATA	
+??0014 . . . . . . . . . . . . .	Byte	 00003CA2 _DATA	
+??0015 . . . . . . . . . . . . .	Byte	 00003CB7 _DATA	
+??0016 . . . . . . . . . . . . .	Byte	 00003CCC _DATA	
+??0017 . . . . . . . . . . . . .	Byte	 00003CE1 _DATA	
+??0018 . . . . . . . . . . . . .	Byte	 00003CF3 _DATA	
+??0019 . . . . . . . . . . . . .	Byte	 00003D0F _DATA	
+??001A . . . . . . . . . . . . .	Byte	 00003D24 _DATA	
+??001B . . . . . . . . . . . . .	Byte	 00003D39 _DATA	
+??001C . . . . . . . . . . . . .	Byte	 00003D4E _DATA	
+??001D . . . . . . . . . . . . .	Byte	 00003D63 _DATA	
+??001E . . . . . . . . . . . . .	Byte	 00003D78 _DATA	
+??001F . . . . . . . . . . . . .	Byte	 00003D8D _DATA	
+??0020 . . . . . . . . . . . . .	Byte	 00003D9A _DATA	
+??0021 . . . . . . . . . . . . .	Byte	 000047CB _DATA	
 @CodeSize  . . . . . . . . . . .	Number	 00000000h   
 @DataSize  . . . . . . . . . . .	Number	 00000000h   
 @Interface . . . . . . . . . . .	Number	 00000003h   
@@ -2015,7 +2606,6 @@ Symbols:
 @fardata . . . . . . . . . . . .	Text   	 FLAT
 @stack . . . . . . . . . . . . .	Text   	 FLAT
 ALT_MASK . . . . . . . . . . . .	Number	 00000003h   
-BUFFER_SIZE  . . . . . . . . . .	Number	 00001388h   
 CAPSLOCK_ON  . . . . . . . . . .	Number	 00000080h   
 CREATE_ALWAYS  . . . . . . . . .	Number	 00000002h   
 CREATE_NEW . . . . . . . . . . .	Number	 00000001h   
@@ -2132,21 +2722,24 @@ OPEN_ALWAYS  . . . . . . . . . .	Number	 00000004h
 OPEN_EXISTING  . . . . . . . . .	Number	 00000003h   
 PLAY_AREA_X  . . . . . . . . . .	Number	 0000000Ah   
 PLAY_AREA_Y  . . . . . . . . . .	Number	 00000002h   
+PROMPT_BUFFER_SIZE . . . . . . .	Number	 00001388h   
 PeekConsoleInput . . . . . . . .	Text   	 PeekConsoleInputA
 RIGHT_ALT_PRESSED  . . . . . . .	Number	 00000001h   
 RIGHT_CTRL_PRESSED . . . . . . .	Number	 00000004h   
 ReadConsoleInput . . . . . . . .	Text   	 ReadConsoleInputA
 ReadConsole  . . . . . . . . . .	Text   	 ReadConsoleA
 SCOREBOARD_Y . . . . . . . . . .	Number	 00000006h   
+SCORE_IN_BUFFER_SIZE . . . . . .	Number	 000007D0h   
 SCORE_LABEL_LENGTH . . . . . . .	Number	 00000014h   
+SCORE_OUT_BUFFER_SIZE  . . . . .	Number	 000001F5h   
 SCROLLLOCK_ON  . . . . . . . . .	Number	 00000040h   
 SECOND_IN_TICKS  . . . . . . . .	Number	 00000014h   
 SHIFT_MASK . . . . . . . . . . .	Number	 00000010h   
 SHIFT_PRESSED  . . . . . . . . .	Number	 00000010h   
 STARTING_DISTANCE  . . . . . . .	Number	 00000018h   
-STARTING_PROGRESSION_SPEED . . .	Number	 00000014h   
+STARTING_PROGRESSION_SPEED . . .	Number	 00000028h   
 STATS_SCREEN_X . . . . . . . . .	Number	 00000023h   
-STATS_SCREEN_Y . . . . . . . . .	Number	 0000000Ah   
+STATS_SCREEN_Y . . . . . . . . .	Number	 00000008h   
 STD_ERROR_HANDLE . . . . . . . .	Number	 -0000000Ch   
 STD_INPUT_HANDLE . . . . . . . .	Number	 -0000000Ah   
 STD_OUTPUT_HANDLE  . . . . . . .	Number	 -0000000Bh   
@@ -2240,6 +2833,8 @@ backspacesPressed  . . . . . . .	DWord	 00003B87 _DATA
 black  . . . . . . . . . . . . .	Number	 00000000h   
 blue . . . . . . . . . . . . . .	Number	 00000001h   
 brown  . . . . . . . . . . . . .	Number	 00000006h   
+bufsize  . . . . . . . . . . . .	DWord	 00003BA3 _DATA	
+bytesRead  . . . . . . . . . . .	DWord	 00003B9B _DATA	
 charIdx  . . . . . . . . . . . .	DWord	 0000145A _DATA	
 charsTyped . . . . . . . . . . .	DWord	 00003B83 _DATA	
 cursorX  . . . . . . . . . . . .	Byte	 00003B76 _DATA	
@@ -2248,11 +2843,17 @@ cyan . . . . . . . . . . . . . .	Number	 00000003h
 distanceFromTop  . . . . . . . .	Byte	 00003B78 _DATA	
 divider  . . . . . . . . . . . .	Byte	 00000065 _DATA	
 endingMsg  . . . . . . . . . . .	Byte	 000000A6 _DATA	
+errorsPerHundredLabel  . . . . .	Byte	 000047A0 _DATA	
 exit . . . . . . . . . . . . . .	Text   	 INVOKE ExitProcess,0
+fHandle  . . . . . . . . . . . .	DWord	 00003B97 _DATA	
 fileHandle . . . . . . . . . . .	DWord	 00001452 _DATA	
+fileNewLine  . . . . . . . . . .	Byte	 00004778 _DATA	
 filename . . . . . . . . . . . .	Byte	 00001449 _DATA	
 gray . . . . . . . . . . . . . .	Number	 00000008h   
 green  . . . . . . . . . . . . .	Number	 00000002h   
+inBuffer . . . . . . . . . . . .	Byte	 00003DAB _DATA	
+intCharCount . . . . . . . . . .	Byte	 000047EE _DATA	
+intStr . . . . . . . . . . . . .	Byte	 000047DE _DATA	
 lightBlue  . . . . . . . . . . .	Number	 00000009h   
 lightCyan  . . . . . . . . . . .	Number	 0000000Bh   
 lightGray  . . . . . . . . . . .	Number	 00000007h   
@@ -2262,17 +2863,28 @@ lightRed . . . . . . . . . . . .	Number	 0000000Ch
 linePrintTicksElapsed  . . . . .	Byte	 00003B79 _DATA	
 lineProgressSpeed  . . . . . . .	Byte	 00003B7E _DATA	
 lineStatus . . . . . . . . . . .	DWord	 00003B6E _DATA	
+linesClearedLabel  . . . . . . .	Byte	 0000477F _DATA	
 linesCleared . . . . . . . . . .	DWord	 00003B8F _DATA	
 magenta  . . . . . . . . . . . .	Number	 00000005h   
+nameLength . . . . . . . . . . .	DWord	 00004774 _DATA	
 red  . . . . . . . . . . . . . .	Number	 00000004h   
+scoreBytesRead . . . . . . . . .	DWord	 0000457B _DATA	
+scoreDivider . . . . . . . . . .	Byte	 0000477C _DATA	
+scoreFileHandle  . . . . . . . .	DWord	 00003DA7 _DATA	
+scoreFile  . . . . . . . . . . .	Byte	 00003D9C _DATA	
 secondsPlayed  . . . . . . . . .	DWord	 00003B8B _DATA	
+stringOffset . . . . . . . . . .	DWord	 00003B9F _DATA	
 textColors . . . . . . . . . . .	Word	 0000145E _DATA	
+timePlayedLabel  . . . . . . . .	Byte	 000047BB _DATA	
 timerTicks . . . . . . . . . . .	DWord	 00003B7F _DATA	
 typingPromptLeftBound  . . . . .	DWord	 00001456 _DATA	
 typingPromptRightBound . . . . .	DWord	 00003B7A _DATA	
 typingPromptSize . . . . . . . .	DWord	 00001445 _DATA	
 typingPrompt . . . . . . . . . .	Byte	 000000BD _DATA	
+username . . . . . . . . . . . .	Byte	 0000457F _DATA	
 white  . . . . . . . . . . . . .	Number	 0000000Fh   
+wpmLabel . . . . . . . . . . . .	Byte	 0000478E _DATA	
+wrongCharCount . . . . . . . . .	DWord	 00003B93 _DATA	
 wsprintf . . . . . . . . . . . .	Text   	 wsprintfA
 yellow . . . . . . . . . . . . .	Number	 0000000Eh   
 

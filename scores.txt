@@ -1,0 +1,8 @@
+Ken | Lines cleared: 1 | Words per minute: 1 | Errors per 100 characters: 0 | Seconds played: 2
+
+Ji | Lines cleared: 5 | Words per minute: Kno | Lines cleared: 1 | Words per minute: 17 | Errors per 100 characters: 0 | Seconds played: 15
+
+Kon | Lines cleared: 1 | Words per minute: 19 | Errors per 100 characters: 1 | Seconds played: 15
+
+Kiki | Lines cleared: 3 | Words per minute: 43 | Errors per 100 characters: 7 | Seconds played: 37
+

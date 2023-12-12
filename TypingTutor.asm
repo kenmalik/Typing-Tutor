@@ -89,13 +89,13 @@ SCOREBOARD_Y = PLAY_AREA_Y + 4
 SCORE_LABEL_LENGTH = 20
 
 ; File reading utilities
-BUFFER_SIZE = 5000
+PROMPT_BUFFER_SIZE = 5000
 FILE_UNREAD = -1
 
 ; Game logic timing
 TICK = 50	; in milliseconds
 SECOND_IN_TICKS = 20
-STARTING_PROGRESSION_SPEED = SECOND_IN_TICKS
+STARTING_PROGRESSION_SPEED = SECOND_IN_TICKS * 2
 
 
 .data
@@ -104,7 +104,7 @@ STARTING_PROGRESSION_SPEED = SECOND_IN_TICKS
 	endingMsg BYTE "--- Level Complete ---", 0
 
 	; For file handling
-	typingPrompt BYTE BUFFER_SIZE DUP(?)
+	typingPrompt BYTE PROMPT_BUFFER_SIZE DUP(?)
 	typingPromptSize DWORD 0
 	filename BYTE "Text.txt", 0
 	fileHandle HANDLE ?
@@ -131,6 +131,7 @@ STARTING_PROGRESSION_SPEED = SECOND_IN_TICKS
 	backspacesPressed DWORD 0
 	secondsPlayed DWORD 0
 	linesCleared DWORD 0
+	wrongCharCount DWORD 0
 
 
 .code
@@ -138,11 +139,13 @@ PLAY_GAME proc
 	call ResetGame	; Reset game data every new game
 
 	; Read file to memory
+	mov ebx, PROMPT_BUFFER_SIZE
+	mov ecx, OFFSET typingPrompt
 	mov edx, OFFSET filename
-	call OpenFile
+	call ReadFileToString
 	cmp eax, FILE_UNREAD
 	je Quit
-	call closeInputFile
+	mov typingPromptSize, eax
 	
 	; Graphical elements
 	call DisplayPlayArea
@@ -239,6 +242,7 @@ CharNotEqual:
 	mov eax, white + (red * 16)
 	call WriteToColorArr
 	call WrongInput
+	inc wrongCharCount
 
 LineEndCheck:
 	inc    charIdx
@@ -270,12 +274,11 @@ finishCheck:
 	cmp    typingPrompt[edi + 1], 0
 	jne    MainGameLoop
 
-	mov ebx, typingPromptLeftBound
+	mov ebx, typingPromptLeftBound	; Is everything on the last line correct?
 	call CheckLineStatus
-	jc LevelComplete
-	call ReplacePreviousChar
+	jc LevelComplete				; Yes: complete level
+	call ReplacePreviousChar		; No: Revert last typed character
 	call RevertLineStatus
-	dec charsTyped
 	jmp MainGameLoop
 
 
@@ -283,6 +286,7 @@ LevelComplete:
 	mov cursorX, PLAY_AREA_X
 	mGotoxy cursorX, cursorY
 	call ClearDisplayLine
+	inc linesCleared
 	call LevelCleared
 
 GameStats:
@@ -300,16 +304,27 @@ PLAY_GAME endp
 
 
 ;-------------------------------------------------------------------------------
-; OpenFile
+; ReadFileToString
 ;
 ; Opens the file whose name is stored in filename. Verifies file is opened and
 ; that contents are within designated buffer size.
 ; Receives: EDX = Offset of the filename to be opened.
+;			ECX = Offset of the string to read to.
+;			EBX = Size of buffer
 ; Returns:  EAX = Bytes read (set to FILE_UNREAD if error occurs).
 ;-------------------------------------------------------------------------------
-OpenFile proc
+.data
+	fHandle HANDLE ?
+	bytesRead DWORD 0
+	stringOffset DWORD 0
+	bufsize DWORD 0
+.code
+ReadFileToString proc
+	mov stringOffset, ecx
+	mov bufSize, ebx
+
 	call OpenInputFile
-	mov fileHandle, eax
+	mov fHandle, eax
 
 	cmp eax, INVALID_HANDLE_VALUE
 	jne FileOk
@@ -318,37 +333,30 @@ OpenFile proc
 	jmp Quit
 
 FileOk:
-	mov edx, OFFSET typingPrompt
-	mov ecx, BUFFER_SIZE
+	mov edx, stringOffset
+	mov ecx, bufSize
 	call ReadFromFile
-	mov typingPromptSize, eax
+	mov bytesRead, eax
 	jnc CheckBufferSize
 	mWrite "Error reading file. "
 	call WriteWindowsMsg
 	mov eax, FILE_UNREAD
-	jmp Quit
+	jmp CloseInFile
 	
 CheckBufferSize:
-	cmp eax, BUFFER_SIZE
-	jb Quit
+	cmp eax, bufSize
+	jb CloseInFile
 	mWrite <"Error: Buffer too small for the file", 0dh, 0ah>
 	mov eax, FILE_UNREAD
 
+CloseInFile:
+	mov eax, fHandle
+	call CloseFile
+	mov eax, bytesRead
+
 Quit:
 	ret
-OpenFile endp
-
-
-;-------------------------------------------------------------------------------
-; CloseInputFile
-;
-; Closes the file currently in fileHandle.
-;-------------------------------------------------------------------------------
-CloseInputFile proc USES eax
-	mov eax, fileHandle
-	call CloseFile
-	ret
-CloseInputFile endp
+ReadFileToString endp
 
 
 ;-------------------------------------------------------------------------------
@@ -576,6 +584,18 @@ UpdateScoreboard proc USES eax edx
 	mov eax, backspacesPressed
 	call WriteDec
 
+	mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y + LINE_SPACING * 4
+	mov ecx, charsTyped
+	mov eax, secondsPlayed
+	call GetWPM
+	call WriteDec
+
+	mGotoxy INFO_COLUMN_X + SCORE_LABEL_LENGTH, SCOREBOARD_Y + LINE_SPACING * 5
+	mov eax, charsTyped
+	mov ecx, wrongCharCount
+	call GetErrorsPerHundred
+	call WriteDec
+
 	; Pop original cursor position to return to former position
 	pop ax
 	mov dh, al
@@ -585,6 +605,68 @@ UpdateScoreboard proc USES eax edx
 
 	ret
 UpdateScoreboard endp
+
+
+;-------------------------------------------------------------------------------
+; GetWPM
+;
+; Calculate words per minute.
+; Receives: ECX = Characters
+;			EAX = Seconds
+; Returns:	EAX = Words per minute
+;-------------------------------------------------------------------------------
+GetWPM proc
+	mov edx, 0	; Clear upper register
+	mov ebx, 60	; Divisor = 60 seconds
+	div ebx		; EDX = seconds, EAX = minutes
+
+	cmp eax, 0			; Minutes is 0?
+	jne MinutesNotZero
+	mov eax, 1			; Yes: Round up to 1
+
+MinutesNotZero:
+	push eax	; Save minutes
+
+	; Calculating words (assuming average word is 5 chars)
+	mov edx, 0		; Clear upper register
+	mov eax, ecx	; Dividend = Characters
+	mov ecx, 5		; Divisor = 5 (avg word length)
+	div ecx			; EAX = Words
+
+	mov edx, 0	; Clear upper register
+	pop ebx		; Divisor = minutes
+	div ebx		; Words / Seconds, EAX = WPM
+	
+	ret
+GetWPM endp
+
+
+;-------------------------------------------------------------------------------
+; GetErrorsPerHundred
+;
+; Calculate errors per hundred characters.
+; Receives: ECX = Error characters
+;			EAX = Characters typed
+; Returns:	EAX = Errors per hundred characters
+;-------------------------------------------------------------------------------
+GetErrorsPerHundred proc
+	mov edx, 0		; Clear upper register
+	mov ebx, 100	; Divisor = 100 words
+	div ebx			; EAX = 100s of chars typed
+
+	cmp eax, 0			; 100s of chars typed is 0?
+	jne MinutesNotZero
+	mov eax, 1			; Yes: Round up to 1
+
+MinutesNotZero:
+	; Calculating errors per 100 chars
+	mov edx, 0		; Clear upper register
+	mov ebx, eax	; Divisor = 100s of chars typed
+	mov eax, ecx	; Dividend = Errors typed
+	div ebx			; Errors / 100s of chars typed = Errors per 100, EAX = ErrorsPer100
+
+	ret
+GetErrorsPerHundred endp
 
 
 ;-------------------------------------------------------------------------------
@@ -836,7 +918,7 @@ ResetColors:
 	mov dh, PLAY_AREA_Y
 	call UpdateCursorPos
 
-	mov eax, TICK * SECOND_IN_TICKS * 3
+	mov eax, TICK * SECOND_IN_TICKS * 2
 	call Delay
 
 ClearLines:
@@ -930,7 +1012,10 @@ DisplayPlayArea proc
 	mWrite "Characters Typed  : "
 	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 3
 	mWrite "Backspaces Pressed: "
-	
+	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 4
+	mWrite "Words Per Minute  : "
+	mGotoxy INFO_COLUMN_X, SCOREBOARD_Y + LINE_SPACING * 5
+	mWrite "Errors Per 100    : "
 
 	; How to exit prompt
 	mGotoxy INFO_COLUMN_X, PLAY_AREA_Y + STARTING_DISTANCE
@@ -949,7 +1034,7 @@ DisplayPlayArea endp
 ;-------------------------------------------------------------------------------
 DisplayScores proc
 	STATS_SCREEN_X = 35
-	STATS_SCREEN_Y = 10
+	STATS_SCREEN_Y = 8
 
 	; Game title
 	mov eax, black + (yellow * 16)
@@ -966,7 +1051,6 @@ DisplayScores proc
 	call TimeFormat
 	mov eax, TICK * 2
 	call Delay
-
 
 	mGotoxy STATS_SCREEN_X, STATS_SCREEN_Y + LINE_SPACING
 	mWrite "Lines Cleared     : "
@@ -996,7 +1080,26 @@ DisplayScores proc
 	call Delay
 
 	mGotoxy STATS_SCREEN_X, STATS_SCREEN_Y + LINE_SPACING * 4
-	call WaitMsg
+	mWrite "Words Per Minute  : "
+	mov ecx, charsTyped
+	mov eax, secondsPlayed
+	call GetWPM
+	call WriteDec
+	mov eax, TICK * 2
+	call Delay
+
+	mGotoxy STATS_SCREEN_X, STATS_SCREEN_Y + LINE_SPACING * 5
+	mWrite "Errors Per 100    : "
+	mov eax, charsTyped
+	mov ecx, wrongCharCount
+	call GetErrorsPerHundred
+	call WriteDec
+	mov eax, TICK * 2
+	call Delay
+
+	mGotoxy STATS_SCREEN_X, STATS_SCREEN_Y + LINE_SPACING * 6
+	mWrite "Enter name: "
+	call UpdateScoreFile
 
 	ret
 DisplayScores endp
@@ -1009,6 +1112,8 @@ DisplayScores endp
 ; Receives: EAX = number to count up to
 ;-------------------------------------------------------------------------------
 CountUp proc
+	cmp eax, 0
+	je IsZero
 	mov ecx, eax
 	mov ebx, 0
 
@@ -1024,8 +1129,236 @@ UpCounter:
 
 	loop UpCounter
 
+	jmp Quit
+
+IsZero:
+	mWrite "0"
+
+Quit:
 	ret
 CountUp endp
+
+
+;-------------------------------------------------------------------------------
+; WriteStrToFile
+;
+; Writes a string to a given file.
+; Receives: outFileHandle (arg 0) = the handle of the file being written to
+;			strToWrite (arg 1) = the offset of the string to write
+;			strLen (arg 2)     = the length of the string being written
+;-------------------------------------------------------------------------------
+WriteStrToFile proc, outFileHandle:HANDLE, strToWrite:PTR BYTE, strLen:DWORD
+	mov eax, outFileHandle
+	mov edx, strToWrite
+	mov ecx, strLen
+	call WriteToFile
+	ret
+WriteStrToFile endp
+
+
+;-------------------------------------------------------------------------------
+; ClearString
+;
+; Clears the contents of a string.
+; Receives: strToClear (arg 0) = the address of the string to be cleared
+;			strToClearLen (arg 1) = the length of the string to be cleared
+;-------------------------------------------------------------------------------
+ClearString proc USES eax ecx edx, strToClear:PTR BYTE, strToClearLen:DWORD
+	mov edx, strToClear		; Move address of array into register for ease of use
+	mov ecx, strToClearLen	; Set the counter for the loop to the length of array
+	mov al, 0				; The value to reset string to
+StringClearer:
+	mov [edx + ecx - 1], al
+	loop StringClearer
+	ret
+ClearString endp
+
+
+;-------------------------------------------------------------------------------
+; UpdateScoreFile
+;
+; Requests a name and updates score file accordingly.
+;-------------------------------------------------------------------------------
+UpdateScoreFile proc
+SCORE_IN_BUFFER_SIZE = 2000
+SCORE_OUT_BUFFER_SIZE = 501
+
+.data
+	scoreFile BYTE "scores.txt", 0
+	scoreFileHandle HANDLE ?
+
+	inBuffer BYTE SCORE_IN_BUFFER_SIZE DUP(?)
+	scoreBytesRead DWORD ?
+
+	username BYTE SCORE_OUT_BUFFER_SIZE DUP(?)
+	nameLength DWORD ?
+
+	fileNewLine BYTE 0Dh, 0Ah, 0Dh, 0Ah
+	scoreDivider BYTE " | "
+
+	linesClearedLabel BYTE "Lines cleared: "
+	wpmLabel BYTE "Words per minute: "
+	errorsPerHundredLabel BYTE "Errors per 100 characters: "
+	timePlayedLabel BYTE "Seconds played: "
+
+.code
+	invoke ClearString, ADDR username, LENGTHOF username
+	mov nameLength, 0
+
+	; Read what was on file
+	mov edx, OFFSET scoreFile
+	mov ecx, OFFSET inBuffer
+	mov ebx, SCORE_IN_BUFFER_SIZE
+	call ReadFileToString
+	mov scoreBytesRead, eax
+
+	; Open score file in write mode
+	mov edx, OFFSET scoreFile
+	call CreateOutputFile
+	mov scoreFileHandle, eax
+
+	; Error checking
+	cmp eax, INVALID_HANDLE_VALUE
+	jne out_file_ok
+	mWrite "Cannot create file"
+	call Crlf
+	jmp quit
+
+out_file_ok:
+	; Rewrite what was previously stored in score file
+	invoke WriteStrToFile, scoreFileHandle, ADDR inBuffer, scoreBytesRead
+
+	; Get input for name
+	mReadString username
+	mov nameLength, eax
+
+	; Write username to file
+	invoke WriteStrToFile, scoreFileHandle, ADDR username, nameLength
+
+	invoke WriteStrToFile, scoreFileHandle, ADDR scoreDivider, LENGTHOF scoreDivider	; Write a divider
+
+	; Write lines cleared
+	invoke WriteStrToFile, scoreFileHandle, ADDR linesClearedLabel, LENGTHOF linesClearedLabel
+	mov eax, linesCleared
+	call IntToString
+	invoke WriteStrToFile, scoreFileHandle, edx, ecx
+
+	invoke WriteStrToFile, scoreFileHandle, ADDR scoreDivider, LENGTHOF scoreDivider	; Write a divider
+
+	; Write WPM
+	invoke WriteStrToFile, scoreFileHandle, ADDR wpmLabel, LENGTHOF wpmLabel
+	mov eax, secondsPlayed
+	mov ecx, charsTyped
+	call GetWPM
+	call IntToString
+	invoke WriteStrToFile, scoreFileHandle, edx, ecx
+
+	invoke WriteStrToFile, scoreFileHandle, ADDR scoreDivider, LENGTHOF scoreDivider	; Write a divider
+
+	; Write errors per 100
+	invoke WriteStrToFile, scoreFileHandle, ADDR errorsPerHundredLabel, LENGTHOF errorsPerHundredLabel
+	mov eax, charsTyped
+	mov ecx, wrongCharCount
+	call GetErrorsPerHundred
+	call IntToString
+	invoke WriteStrToFile, scoreFileHandle, edx, ecx
+
+	invoke WriteStrToFile, scoreFileHandle, ADDR scoreDivider, LENGTHOF scoreDivider	; Write a divider
+
+	; Write time played
+	invoke WriteStrToFile, scoreFileHandle, ADDR timePlayedLabel, LENGTHOF timePlayedLabel
+	mov eax, secondsPlayed
+	call IntToString
+	invoke WriteStrToFile, scoreFileHandle, edx, ecx
+
+	; Write a double-spaced new line
+	invoke WriteStrToFile, scoreFileHandle, ADDR fileNewLine, LENGTHOF fileNewLine
+
+	mov eax, scoreFileHandle
+	call CloseFile
+quit:
+	ret
+UpdateScoreFile endp
+
+
+;-------------------------------------------------------------------------------
+; ReverseString
+;
+; Reverses the contents of a string.
+; Receives: strToReverse (arg 0) = the address of the string to be cleared
+;			strToReverseLen (arg 1) = the length of the string to be cleared
+;-------------------------------------------------------------------------------
+ReverseString proc USES eax ebx ecx edx, strToReverse:PTR BYTE, strToReverseLen:DWORD
+	mov edx, strToReverse		; Move address of array into register for ease of use
+	mov ecx, strToReverseLen	; Set the counter for the loop to the length of array
+	dec ecx
+	mov ebx, 0					; Index for character getting
+
+StringPusher:
+	movzx ax, BYTE PTR [edx + ebx]
+	push ax
+	inc ebx
+	loop StringPusher
+
+	mov ecx, strToReverseLen	; Set the counter for the loop to the length of array
+	dec ecx
+	mov ebx, 0					; Index for character getting
+StringPopper:
+	pop ax
+	mov [edx + ebx], al
+	inc ebx
+	loop StringPopper
+	ret
+ReverseString endp
+
+
+;-------------------------------------------------------------------------------
+; IntToString
+;
+; Converts integer to string
+; Returns:  EDX = offset of integer string
+;-------------------------------------------------------------------------------
+.data
+	intStr BYTE 16 DUP(0)
+	intCharCount BYTE 0
+
+.code
+IntToString proc
+	; Resetting data
+	invoke ClearString, ADDR intStr, LENGTHOF intStr
+
+	cmp eax, 0
+	jne NumIsNotZero
+	mov intStr, "0"
+	mov ecx, 1
+	jmp Quit
+
+NumIsNotZero:
+	mov ecx, 0		; Index for int string array
+IntConversionLoop:
+	mov edx, 0		; Divide original int by ten
+	mov ebx, 10
+	div ebx
+
+	add edx, "0"	; Add "0" to remainder to get the number as ASCII
+	mov intStr[ecx], dl
+	
+	inc ecx				; Move to next character
+
+	cmp edx, "0"
+	jne IntConversionLoop
+
+	; Remove leading zero
+	mov intStr[ecx - 1], 0
+
+	invoke ReverseString, ADDR intStr, ecx
+
+	dec ecx
+
+Quit:
+	mov edx, OFFSET intStr
+	ret
+IntToString endp
 
 
 ;-------------------------------------------------------------------------------
@@ -1035,12 +1368,20 @@ CountUp endp
 LEADERBOARD_X = 35
 LEADERBOARD_Y = 10
 
+.data
+
+.code
+
 LEADERBOARD proc
+	mov edx, OFFSET scoreFile
+	mov ecx, OFFSET inBuffer
+	mov ebx, SCORE_IN_BUFFER_SIZE
+	call ReadFileToString
+
 	mov eax, yellow + (black * 16)
 	call SetTextColor
 
-	mWrite "not implemented"
-	call Crlf
+	mWriteString OFFSET inBuffer
 	call WaitMsg
 	ret
 LEADERBOARD endp
