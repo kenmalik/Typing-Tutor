@@ -244,11 +244,21 @@ CharNotEqual:
 	call WrongInput
 
 LineEndCheck:
+	inc    charIdx
 	cmp cursorX, LINE_LENGTH + PLAY_AREA_X_OFFSET
 	jne finishCheck
 
+	call CheckLineStatus
+	jc ClearLine
+	call ReplacePreviousChar
+	call RevertLineStatus
+	dec charsTyped
+	jmp MainGameLoop
+
+ClearLine:
 	; Clear completed lines
-	;call ClearLineStatus
+	mov ebx, typingPromptLeftBound
+	call ClearLineStatus
 	mov dh, cursorY
 	mov dl, PLAY_AREA_X_OFFSET
 	call UpdateCursorPos					; Move cursor position for display clearing
@@ -258,19 +268,28 @@ LineEndCheck:
 	inc distanceFromTop						; Inc distance from top to account for cleared line
 
 finishCheck:
-	inc    charIdx
 	; If not finished yet
 	cmp    typingPrompt[edi + 1], 0
-
 	jne    MainGameLoop
 
+	mov ebx, typingPromptLeftBound
+	call CheckLineStatus
+	jc LevelComplete
+	call ReplacePreviousChar
+	call RevertLineStatus
+	dec charsTyped
+	jmp MainGameLoop
+
+
+LevelComplete:
 	; Level complete message
 	call Crlf
 	mov eax, white + (green * 16)
 	call SetTextColor
 	call Crlf
-	mov edx, OFFSET endingMsg
-	call WriteString
+	mWriteString OFFSET endingMsg
+	call NewLine
+	call WaitMsg
 
 quit:
 	mov eax, white + (black * 16)
@@ -698,11 +717,8 @@ CheckLineStatus proc USES eax ebx ecx edx
 	mov edx, 0		; Counter for how many times rotated
 
 	cmp ecx, LINE_LENGTH
-	jbe IncompleteLine
+	jbe L_LineCheck
 	mov ecx, LINE_LENGTH
-
-IncompleteLine:
-	dec ecx
 
 L_LineCheck:
 	mov eax, lineStatus[0]
