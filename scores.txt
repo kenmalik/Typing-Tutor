@@ -1,8 +1,24 @@
-Ken | Lines cleared: 1 | Words per minute: 1 | Errors per 100 characters: 0 | Seconds played: 2
+Kenji | Lines cleared: 2 | Words per minute: 17 | Errors per 100 characters: 11 | Seconds played: 19
 
-Ji | Lines cleared: 5 | Words per minute: Kno | Lines cleared: 1 | Words per minute: 17 | Errors per 100 characters: 0 | Seconds played: 15
+Barkeshli | Lines cleared: 2 | Words per minute: 17 | Errors per 100 characters: 9 | Seconds played: 16
 
-Kon | Lines cleared: 1 | Words per minute: 19 | Errors per 100 characters: 1 | Seconds played: 15
+Bozo | Lines cleared: 0 | Words per minute: 0 | Errors per 100 characters: 9 | Seconds played: 35
 
-Kiki | Lines cleared: 3 | Words per minute: 43 | Errors per 100 characters: 7 | Seconds played: 37
+Kono | Lines cleared: 2 | Words per minute: 16 | Errors per 100 characters: 3 | Seconds played: 12
+
+Koko | Lines cleared: 2 | Words per minute: 18 | Errors per 100 characters: 11 | Seconds played: 17
+
+Kendo | Lines cleared: 2 | Words per minute: 17 | Errors per 100 characters: 5 | Seconds played: 29
+
+Nomo | Lines cleared: 0 | Words per minute: 0 | Errors per 100 characters: 0 | Seconds played: 35
+
+click | Lines cleared: 2 | Words per minute: 17 | Errors per 100 characters: 8 | Seconds played: 18
+
+click | Lines cleared: 2 | Words per minute: 16 | Errors per 100 characters: 5 | Seconds played: 16
+
+Holo | Lines cleared: 0 | Words per minute: 3 | Errors per 100 characters: 7 | Seconds played: 35
+
+Longid | Lines cleared: 1 | Words per minute: 18 | Errors per 100 characters: 8 | Seconds played: 35
+
+Nono | Lines cleared: 2 | Words per minute: 17 | Errors per 100 characters: 5 | Seconds played: 16
 

@@ -679,6 +679,7 @@ ResetGame proc
 	mov charsTyped, 0
 	mov backspacesPressed, 0
 	mov linesCleared, 0
+	mov wrongCharCount, 0
 
 	; Reset starting distance
 	mov distanceFromTop, STARTING_DISTANCE
@@ -891,6 +892,7 @@ Countdown:
 	ret
 GameStart endp
 
+
 ;-------------------------------------------------------------------------------
 ; GameOver
 ;
@@ -899,21 +901,24 @@ GameStart endp
 GameOver proc
 	mov ecx, LENGTHOF textColors - 1
 
+	; Reset color array to contain all read
 ResetColors:
 	mov textColors[ecx * TYPE textColors], white+(red*16)
 	loop ResetColors
 	mov textColors[ecx * TYPE textColors], white+(red*16)
 
-	; Rewrite prompt in red
+	; Position cursor for rewrite
 	mov dl, PLAY_AREA_X
 	mov dh, PLAY_AREA_Y
 	call UpdateCursorPos
 
+	; Rewrite prompt in red
 	mov edx, OFFSET typingPrompt
 	mov ebx, typingPromptLeftBound
 	mov ecx, typingPromptRightBound
 	call ReprintPrompt
 
+	; Return cursor to top left
 	mov dl, PLAY_AREA_X
 	mov dh, PLAY_AREA_Y
 	call UpdateCursorPos
@@ -921,6 +926,7 @@ ResetColors:
 	mov eax, TICK * SECOND_IN_TICKS * 2
 	call Delay
 
+	; Clear remaining lines one by one
 ClearLines:
 	mov eax, TICK * 2
 	call Delay
@@ -1291,7 +1297,6 @@ UpdateScoreFile endp
 ReverseString proc USES eax ebx ecx edx, strToReverse:PTR BYTE, strToReverseLen:DWORD
 	mov edx, strToReverse		; Move address of array into register for ease of use
 	mov ecx, strToReverseLen	; Set the counter for the loop to the length of array
-	dec ecx
 	mov ebx, 0					; Index for character getting
 
 StringPusher:
@@ -1301,7 +1306,6 @@ StringPusher:
 	loop StringPusher
 
 	mov ecx, strToReverseLen	; Set the counter for the loop to the length of array
-	dec ecx
 	mov ebx, 0					; Index for character getting
 StringPopper:
 	pop ax
@@ -1349,11 +1353,10 @@ IntConversionLoop:
 	jne IntConversionLoop
 
 	; Remove leading zero
-	mov intStr[ecx - 1], 0
+	dec ecx
+	mov intStr[ecx], 0
 
 	invoke ReverseString, ADDR intStr, ecx
-
-	dec ecx
 
 Quit:
 	mov edx, OFFSET intStr
