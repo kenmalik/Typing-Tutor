@@ -16,6 +16,7 @@
     </MASM>
   </ItemGroup>
   <ItemGroup>
+    <Text Include="scores.txt" />
     <Text Include="Text.txt" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
